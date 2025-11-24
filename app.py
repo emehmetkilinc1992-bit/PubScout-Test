@@ -24,10 +24,34 @@ with st.sidebar:
     menu = st.radio("Modüller", 
         ["🏠 Ana Sayfa", "🔍 Dergi Bulucu (Core)", "🛠️ Utility Tools", "📝 CV Oluşturucu", "🕵️ AI Ajanı (Beta)", "📊 Yönetici Paneli", "🛡️ Güvenlik Kontrolü"])
 
-# --- 1. ANA SAYFA (TAM EKRAN GÖRSEL & OVERLAY) ---
+# --- 1. ANA SAYFA (Base64 Yöntemi ile Garanti Resim) ---
 if menu == "🏠 Ana Sayfa":
-    
-    # ÖZEL CSS İLE TAM EKRAN ARKA PLAN
+    import base64
+
+    # Görseli Base64 formatına çeviren fonksiyon (Resim yükleme garantisi için)
+    def get_base64_of_bin_file(bin_file):
+        try:
+            with open(bin_file, 'rb') as f:
+                data = f.read()
+            return base64.b64encode(data).decode()
+        except FileNotFoundError:
+            return None
+
+    # banner.jpg dosyasını oku
+    img_base64 = get_base64_of_bin_file("banner.jpg")
+
+    # CSS Bloğu
+    if img_base64:
+        background_style = f"""
+            background-image: url("data:image/jpeg;base64,{img_base64}");
+            background-size: cover;
+            background-position: center;
+        """
+    else:
+        # Resim bulunamazsa düz renk olsun (Hata vermesin)
+        background_style = "background-color: #0F2C59;"
+        st.error("Hata: 'banner.jpg' dosyası bulunamadı. GitHub'a yüklediğinden emin ol!")
+
     st.markdown(f"""
     <style>
         /* Ana sayfa konteynerını genişlet */
@@ -43,23 +67,21 @@ if menu == "🏠 Ana Sayfa":
         .hero-container {{
             position: relative;
             width: 100%;
-            height: 500px; /* Yüksekliği buradan ayarlayabilirsin */
-            background-image: url('banner.jpg'); /* Resim dosyanın adı */
-            background-size: cover;
-            background-position: center;
+            height: 550px;
+            {background_style}
             display: flex;
             align-items: center;
             justify-content: center;
         }}
         
-        /* Karanlık Katman (Okunabilirlik İçin) */
+        /* Karanlık Katman */
         .hero-overlay {{
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(15, 44, 89, 0.7); /* Koyu Lacivert, %70 Saydamlık */
+            background-color: rgba(15, 44, 89, 0.6); /* Saydamlık ayarı */
         }}
         
         /* Metin İçeriği */
@@ -72,19 +94,21 @@ if menu == "🏠 Ana Sayfa":
         }}
         
         .hero-title {{
-            font-size: 4rem;
+            font-size: 4.5rem;
             font-weight: 800;
             margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            text-shadow: 2px 2px 8px rgba(0,0,0,0.6);
+            line-height: 1.2;
         }}
         
         .hero-subtitle {{
             font-size: 1.5rem;
             font-weight: 400;
-            margin-bottom: 30px;
+            margin-bottom: 40px;
+            text-shadow: 1px 1px 4px rgba(0,0,0,0.5);
         }}
 
-        /* Metrik Kutuları (Aşağıdaki) */
+        /* Metrik Kutuları */
         .metric-box {{
             background: white;
             padding: 25px;
@@ -92,12 +116,14 @@ if menu == "🏠 Ana Sayfa":
             text-align: center;
             box-shadow: 0 10px 25px rgba(0,0,0,0.1);
             transition: transform 0.3s;
+            border-bottom: 4px solid #0F2C59;
         }}
         .metric-box:hover {{
             transform: translateY(-10px);
+            border-bottom: 4px solid #00DFA2;
         }}
         .metric-value {{ font-size: 2.5rem; font-weight: 800; color: #0F2C59; }}
-        .metric-label {{ font-size: 1rem; color: #666; }}
+        .metric-label {{ font-size: 1rem; color: #666; font-weight: 600; }}
         
     </style>
     
@@ -105,26 +131,22 @@ if menu == "🏠 Ana Sayfa":
         <div class="hero-overlay"></div>
         <div class="hero-content">
             <h1 class="hero-title">PubScout</h1>
-            <p class="hero-subtitle">Makaleniz için en doğru evi bulun. Bürokrasiyle değil, bilimle uğraşın.</p>
-            <a href="#" style="background-color:#00DFA2; color:#0F2C59; padding:15px 30px; border-radius:30px; text-decoration:none; font-weight:bold; box-shadow: 0 4px 15px rgba(0,223,162,0.4);">Hemen Başlayın</a>
+            <p class="hero-subtitle">Makaleniz için en doğru evi bulun.<br>Bürokrasiyle değil, bilimle uğraşın.</p>
         </div>
     </div>
     """, unsafe_allow_html=True)
     
-    # Görselin Altındaki Boşluk
     st.write("###")
     st.write("###")
     
-    # İSTATİSTİKLER (Yeni Tasarım)
-    st.markdown("<h2 style='text-align:center; margin-bottom:30px;'>Neden PubScout?</h2>", unsafe_allow_html=True)
-    
+    # İSTATİSTİKLER
     c1, c2, c3 = st.columns(3)
     with c1:
         st.markdown("""
         <div class="metric-box">
             <div style="font-size:3rem;">📚</div>
             <div class="metric-value">85,000+</div>
-            <div class="metric-label">İndeksli Dergi (OpenAlex & DOAJ)</div>
+            <div class="metric-label">İndeksli Dergi</div>
         </div>
         """, unsafe_allow_html=True)
     with c2:
@@ -132,7 +154,7 @@ if menu == "🏠 Ana Sayfa":
         <div class="metric-box">
             <div style="font-size:3rem;">🤖</div>
             <div class="metric-value">AI Destekli</div>
-            <div class="metric-label">Semantik ve Atıf Analizi</div>
+            <div class="metric-label">Semantik Analiz</div>
         </div>
         """, unsafe_allow_html=True)
     with c3:
@@ -140,21 +162,14 @@ if menu == "🏠 Ana Sayfa":
         <div class="metric-box">
             <div style="font-size:3rem;">🛡️</div>
             <div class="metric-value">%100 Güvenli</div>
-            <div class="metric-label">Predatory (Yağmacı) Dergi Kalkanı</div>
+            <div class="metric-label">Predatory Kalkanı</div>
         </div>
         """, unsafe_allow_html=True)
     
     st.write("###")
     st.divider()
     
-    # Alt Bilgi
     st.markdown("<p style='text-align:center; color:gray;'>© 2025 PubScout Academic Solutions. All rights reserved.</p>", unsafe_allow_html=True)
-    
-    # 4. HIZLI AKSİYON BUTONU
-    st.markdown("<h3 style='text-align:center;'>Hemen Başlayın</h3>", unsafe_allow_html=True)
-    col_center = st.columns([1, 2, 1])
-    with col_center[1]:
-        st.info("👈 Sol menüden **'Dergi Bulucu'** modülünü seçerek analize başlayabilirsiniz.")
 
 # --- 2. DERGİ BULUCU (CORE) ---
 elif menu == "🔍 Dergi Bulucu (Core)":
@@ -301,5 +316,6 @@ elif menu == "🛡️ Güvenlik Kontrolü":
     if st.button("Sorgula"):
         if check_predatory(j_name): st.error("⚠️ RİSKLİ DERGİ!")
         else: st.success("✅ Temiz görünüyor.")
+
 
 
