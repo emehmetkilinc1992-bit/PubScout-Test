@@ -24,11 +24,11 @@ with st.sidebar:
     menu = st.radio("Modüller", 
         ["🏠 Ana Sayfa", "🔍 Dergi Bulucu (Core)", "🛠️ Utility Tools", "📝 CV Oluşturucu", "🕵️ AI Ajanı (Beta)", "📊 Yönetici Paneli", "🛡️ Güvenlik Kontrolü"])
 
-# --- 1. ANA SAYFA (Base64 Yöntemi ile Garanti Resim) ---
+# --- 1. ANA SAYFA (BANNER + DERGİ BULUCU BİR ARADA) ---
 if menu == "🏠 Ana Sayfa":
     import base64
 
-    # Görseli Base64 formatına çeviren fonksiyon (Resim yükleme garantisi için)
+    # 1. BANNER AYARLARI
     def get_base64_of_bin_file(bin_file):
         try:
             with open(bin_file, 'rb') as f:
@@ -37,139 +37,149 @@ if menu == "🏠 Ana Sayfa":
         except FileNotFoundError:
             return None
 
-    # banner.jpg dosyasını oku
     img_base64 = get_base64_of_bin_file("banner.jpg")
-
-    # CSS Bloğu
+    
+    # Resim varsa onu, yoksa düz rengi kullan
     if img_base64:
-        background_style = f"""
-            background-image: url("data:image/jpeg;base64,{img_base64}");
-            background-size: cover;
-            background-position: center;
-        """
+        bg_style = f"background-image: url('data:image/jpeg;base64,{img_base64}');"
     else:
-        # Resim bulunamazsa düz renk olsun (Hata vermesin)
-        background_style = "background-color: #0F2C59;"
-        st.error("Hata: 'banner.jpg' dosyası bulunamadı. GitHub'a yüklediğinden emin ol!")
+        bg_style = "background-color: #0F2C59;"
 
+    # 2. CSS & HTML (Banner Yüksekliğini 550px'den 350px'e düşürdük ki arama kutusu görünsün)
     st.markdown(f"""
     <style>
-        /* Ana sayfa konteynerını genişlet */
-        .main .block-container {{
-            padding-top: 0rem;
-            padding-bottom: 0rem;
-            padding-left: 0rem;
-            padding-right: 0rem;
-            max-width: 100%;
-        }}
+        .main .block-container {{ padding-top: 0; max-width: 100%; }}
         
-        /* Hero Banner Alanı */
         .hero-container {{
-            position: relative;
             width: 100%;
-            height: 550px;
-            {background_style}
+            height: 350px; /* Daha kısa banner */
+            {bg_style}
+            background-size: cover;
+            background-position: center;
             display: flex;
             align-items: center;
             justify-content: center;
-        }}
-        
-        /* Karanlık Katman */
-        .hero-overlay {{
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(15, 44, 89, 0.6); /* Saydamlık ayarı */
-        }}
-        
-        /* Metin İçeriği */
-        .hero-content {{
             position: relative;
-            z-index: 1;
-            text-align: center;
-            color: white;
-            padding: 20px;
+            margin-bottom: 30px;
         }}
         
-        .hero-title {{
-            font-size: 4.5rem;
-            font-weight: 800;
-            margin-bottom: 10px;
-            text-shadow: 2px 2px 8px rgba(0,0,0,0.6);
-            line-height: 1.2;
+        .hero-overlay {{
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 44, 89, 0.7);
         }}
         
-        .hero-subtitle {{
-            font-size: 1.5rem;
-            font-weight: 400;
-            margin-bottom: 40px;
-            text-shadow: 1px 1px 4px rgba(0,0,0,0.5);
+        .hero-content {{
+            position: relative; z-index: 1; text-align: center; color: white;
         }}
-
-        /* Metrik Kutuları */
-        .metric-box {{
-            background: white;
-            padding: 25px;
-            border-radius: 15px;
-            text-align: center;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-            transition: transform 0.3s;
-            border-bottom: 4px solid #0F2C59;
-        }}
-        .metric-box:hover {{
-            transform: translateY(-10px);
-            border-bottom: 4px solid #00DFA2;
-        }}
-        .metric-value {{ font-size: 2.5rem; font-weight: 800; color: #0F2C59; }}
-        .metric-label {{ font-size: 1rem; color: #666; font-weight: 600; }}
         
+        .hero-title {{ font-size: 3.5rem; font-weight: 800; margin: 0; text-shadow: 2px 2px 8px rgba(0,0,0,0.6); }}
+        .hero-subtitle {{ font-size: 1.2rem; font-weight: 400; opacity: 0.9; }}
     </style>
     
     <div class="hero-container">
         <div class="hero-overlay"></div>
         <div class="hero-content">
             <h1 class="hero-title">PubScout</h1>
-            <p class="hero-subtitle">Makaleniz için en doğru evi bulun.<br>Bürokrasiyle değil, bilimle uğraşın.</p>
+            <p class="hero-subtitle">Makaleniz için en doğru evi bulun.</p>
         </div>
     </div>
     """, unsafe_allow_html=True)
+
+    # 3. ARAMA MOTORU (ANA SAYFAYA TAŞINDI)
+    st.markdown("<h3 style='text-align:center; color:#0F2C59;'>🔎 Aramaya Başlayın</h3>", unsafe_allow_html=True)
     
-    st.write("###")
-    st.write("###")
+    # Konteyner ile ortalayalım
+    col_spacer1, col_main, col_spacer2 = st.columns([1, 6, 1])
     
-    # İSTATİSTİKLER
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.markdown("""
-        <div class="metric-box">
-            <div style="font-size:3rem;">📚</div>
-            <div class="metric-value">85,000+</div>
-            <div class="metric-label">İndeksli Dergi</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with c2:
-        st.markdown("""
-        <div class="metric-box">
-            <div style="font-size:3rem;">🤖</div>
-            <div class="metric-value">AI Destekli</div>
-            <div class="metric-label">Semantik Analiz</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with c3:
-        st.markdown("""
-        <div class="metric-box">
-            <div style="font-size:3rem;">🛡️</div>
-            <div class="metric-value">%100 Güvenli</div>
-            <div class="metric-label">Predatory Kalkanı</div>
-        </div>
-        """, unsafe_allow_html=True)
+    with col_main:
+        # Sekmeli Yapı
+        tab1, tab2 = st.tabs(["📄 Özet (Abstract) ile Ara", "🔗 Referans (DOI) ile Ara"])
+        
+        # --- TAB 1: ÖZET ARAMA ---
+        with tab1:
+            abstract_input = st.text_area("Makale Özeti (Türkçe veya İngilizce)", height=150, placeholder="Abstract metnini buraya yapıştırın...")
+            
+            # Butonu ortalamak için kolon kullanalım
+            b_c1, b_c2, b_c3 = st.columns([1, 2, 1])
+            with b_c2:
+                search_clicked = st.button("🚀 Dergileri Bul", use_container_width=True)
+
+        # --- TAB 2: DOI ARAMA ---
+        with tab2:
+            doi_input = st.text_area("DOI Listesi (Virgülle ayırın)", height=150, placeholder="10.1007/xxxx, 10.1016/yyyy...")
+            d_c1, d_c2, d_c3 = st.columns([1, 2, 1])
+            with d_c2:
+                doi_clicked = st.button("🔗 Referanslardan Bul", use_container_width=True)
+
+    # 4. SONUÇLARIN GÖSTERİMİ
+    # Kullanıcı butona bastıysa sonuçları göster, basmadıysa alttaki metrikleri göster.
     
-    st.write("###")
-    st.divider()
-    
-    st.markdown("<p style='text-align:center; color:gray;'>© 2025 PubScout Academic Solutions. All rights reserved.</p>", unsafe_allow_html=True)
+    if search_clicked and abstract_input:
+        if len(abstract_input) < 20:
+            st.warning("Lütfen daha uzun bir metin girin.")
+        else:
+            with st.spinner('Yapay Zeka Analiz Ediyor...'):
+                df = get_journals_from_openalex(abstract_input, mode="abstract")
+            
+            if not df.empty:
+                journal_counts = df['Dergi Adı'].value_counts().reset_index()
+                journal_counts.columns = ['Dergi Adı', 'Skor']
+                st.success(f"Analiz Tamamlandı! {len(journal_counts)} uygun dergi bulundu.")
+                
+                # Kartlar (Card Design)
+                c1, c2, c3 = st.columns(3)
+                top_journals = journal_counts.head(3)
+                
+                for index, row in top_journals.iterrows():
+                    is_predatory = check_predatory(row['Dergi Adı'])
+                    detail = df[df['Dergi Adı'] == row['Dergi Adı']].iloc[0]
+                    card_color = "#FF4B4B" if is_predatory else "#00CC96"
+                    status_text = "⚠️ RİSKLİ" if is_predatory else "✅ GÜVENLİ"
+                    
+                    homepage = detail.get('Link')
+                    guidelines = f"https://www.google.com/search?q={row['Dergi Adı'].replace(' ', '+')}+author+guidelines"
+                    
+                    with (c1 if index==0 else c2 if index==1 else c3):
+                        st.markdown(f"""
+                        <div style="background:white; border-radius:12px; padding:20px; border-top:5px solid {card_color}; box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+                            <h4 style="color:#0F2C59; height:40px; overflow:hidden;">{row['Dergi Adı']}</h4>
+                            <p style="font-size:12px; color:gray;">{detail['Yayınevi']}</p>
+                            <p><strong>{status_text}</strong></p>
+                            <p>Etki: <strong>{detail['Tahmini Q Değeri']}</strong></p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        st.write("###")
+                        bc1, bc2 = st.columns(2)
+                        with bc1:
+                            if homepage: st.link_button("🌐 Site", homepage, use_container_width=True)
+                            else: st.button("🚫", disabled=True, use_container_width=True)
+                        with bc2:
+                            st.link_button("📝 Rehber", guidelines, use_container_width=True)
+                
+                st.write("### 📊 Tüm Liste")
+                st.dataframe(df, use_container_width=True)
+            else:
+                st.error("Sonuç bulunamadı.")
+
+    elif doi_clicked and doi_input:
+        # (DOI Arama Kodları Buraya - Aynısı)
+        with st.spinner('Referanslar taranıyor...'):
+            df_doi = get_journals_from_openalex(doi_input, mode="doi")
+        if not df_doi.empty:
+            st.success("Referans kültürü analiz edildi!")
+            st.dataframe(df_doi, use_container_width=True)
+        else:
+            st.error("Veri bulunamadı.")
+
+    # 5. İSTATİSTİKLER (Sadece Arama Yapılmadıysa Göster - Ekranı Temiz Tutmak İçin)
+    elif not search_clicked and not doi_clicked:
+        st.write("###")
+        st.write("###")
+        st.divider()
+        m1, m2, m3 = st.columns(3)
+        m1.metric("📚 İndeksli Dergi", "85,000+")
+        m2.metric("🤖 AI Analizi", "Semantik")
+        m3.metric("🛡️ Güvenlik", "%100")
 
 # --- 2. DERGİ BULUCU (CORE) ---
 elif menu == "🔍 Dergi Bulucu (Core)":
@@ -316,6 +326,7 @@ elif menu == "🛡️ Güvenlik Kontrolü":
     if st.button("Sorgula"):
         if check_predatory(j_name): st.error("⚠️ RİSKLİ DERGİ!")
         else: st.success("✅ Temiz görünüyor.")
+
 
 
 
