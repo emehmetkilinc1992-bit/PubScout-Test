@@ -24,35 +24,131 @@ with st.sidebar:
     menu = st.radio("Modüller", 
         ["🏠 Ana Sayfa", "🔍 Dergi Bulucu (Core)", "🛠️ Utility Tools", "📝 CV Oluşturucu", "🕵️ AI Ajanı (Beta)", "📊 Yönetici Paneli", "🛡️ Güvenlik Kontrolü"])
 
-# --- 1. ANA SAYFA ---
+# --- 1. ANA SAYFA (TAM EKRAN GÖRSEL & OVERLAY) ---
 if menu == "🏠 Ana Sayfa":
     
-    # 1. GÖRSELİ YERLEŞTİRME
-    # use_container_width=True sayesinde resim ekranın genişliğine tam oturur.
-    st.image("banner.jpg", use_container_width=True)
+    # ÖZEL CSS İLE TAM EKRAN ARKA PLAN
+    st.markdown(f"""
+    <style>
+        /* Ana sayfa konteynerını genişlet */
+        .main .block-container {{
+            padding-top: 0rem;
+            padding-bottom: 0rem;
+            padding-left: 0rem;
+            padding-right: 0rem;
+            max-width: 100%;
+        }}
+        
+        /* Hero Banner Alanı */
+        .hero-container {{
+            position: relative;
+            width: 100%;
+            height: 500px; /* Yüksekliği buradan ayarlayabilirsin */
+            background-image: url('banner.jpg'); /* Resim dosyanın adı */
+            background-size: cover;
+            background-position: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }}
+        
+        /* Karanlık Katman (Okunabilirlik İçin) */
+        .hero-overlay {{
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(15, 44, 89, 0.7); /* Koyu Lacivert, %70 Saydamlık */
+        }}
+        
+        /* Metin İçeriği */
+        .hero-content {{
+            position: relative;
+            z-index: 1;
+            text-align: center;
+            color: white;
+            padding: 20px;
+        }}
+        
+        .hero-title {{
+            font-size: 4rem;
+            font-weight: 800;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }}
+        
+        .hero-subtitle {{
+            font-size: 1.5rem;
+            font-weight: 400;
+            margin-bottom: 30px;
+        }}
+
+        /* Metrik Kutuları (Aşağıdaki) */
+        .metric-box {{
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+        }}
+        .metric-box:hover {{
+            transform: translateY(-10px);
+        }}
+        .metric-value {{ font-size: 2.5rem; font-weight: 800; color: #0F2C59; }}
+        .metric-label {{ font-size: 1rem; color: #666; }}
+        
+    </style>
     
-    # 2. ALTINA GERÇEK BAŞLIK VE METİNLER
-    st.markdown("""
-    <div style="text-align:center; margin-top:-20px;">
-        <h1 style="color:#0F2C59; font-size: 3rem;">PubScout</h1>
-        <p style="font-size:1.5rem; color:#555;">Makaleniz için en doğru evi bulun.</p>
-        <p style="color:#888;">Bürokrasiyle değil, bilimle uğraşın. Yapay zeka destekli asistanınız.</p>
+    <div class="hero-container">
+        <div class="hero-overlay"></div>
+        <div class="hero-content">
+            <h1 class="hero-title">PubScout</h1>
+            <p class="hero-subtitle">Makaleniz için en doğru evi bulun. Bürokrasiyle değil, bilimle uğraşın.</p>
+            <a href="#" style="background-color:#00DFA2; color:#0F2C59; padding:15px 30px; border-radius:30px; text-decoration:none; font-weight:bold; box-shadow: 0 4px 15px rgba(0,223,162,0.4);">Hemen Başlayın</a>
+        </div>
     </div>
     """, unsafe_allow_html=True)
     
-    st.write("###") # Biraz boşluk
+    # Görselin Altındaki Boşluk
+    st.write("###")
+    st.write("###")
     
-    # 3. METRİKLER (Görselin altına şık durur)
+    # İSTATİSTİKLER (Yeni Tasarım)
+    st.markdown("<h2 style='text-align:center; margin-bottom:30px;'>Neden PubScout?</h2>", unsafe_allow_html=True)
+    
     c1, c2, c3 = st.columns(3)
-    # Metrikleri görselleştirmek için arka plan rengi ekleyelim
     with c1:
-        st.markdown('<div style="background:#e3f2fd; padding:15px; border-radius:10px; text-align:center;"><h3>📚 85,000+</h3><p>İndeksli Dergi</p></div>', unsafe_allow_html=True)
+        st.markdown("""
+        <div class="metric-box">
+            <div style="font-size:3rem;">📚</div>
+            <div class="metric-value">85,000+</div>
+            <div class="metric-label">İndeksli Dergi (OpenAlex & DOAJ)</div>
+        </div>
+        """, unsafe_allow_html=True)
     with c2:
-        st.markdown('<div style="background:#e0f2f1; padding:15px; border-radius:10px; text-align:center;"><h3>🌍 Global</h3><p>Şablon Desteği</p></div>', unsafe_allow_html=True)
+        st.markdown("""
+        <div class="metric-box">
+            <div style="font-size:3rem;">🤖</div>
+            <div class="metric-value">AI Destekli</div>
+            <div class="metric-label">Semantik ve Atıf Analizi</div>
+        </div>
+        """, unsafe_allow_html=True)
     with c3:
-        st.markdown('<div style="background:#fce4ec; padding:15px; border-radius:10px; text-align:center;"><h3>🛡️ %100</h3><p>Güvenli Yayın</p></div>', unsafe_allow_html=True)
+        st.markdown("""
+        <div class="metric-box">
+            <div style="font-size:3rem;">🛡️</div>
+            <div class="metric-value">%100 Güvenli</div>
+            <div class="metric-label">Predatory (Yağmacı) Dergi Kalkanı</div>
+        </div>
+        """, unsafe_allow_html=True)
     
+    st.write("###")
     st.divider()
+    
+    # Alt Bilgi
+    st.markdown("<p style='text-align:center; color:gray;'>© 2025 PubScout Academic Solutions. All rights reserved.</p>", unsafe_allow_html=True)
     
     # 4. HIZLI AKSİYON BUTONU
     st.markdown("<h3 style='text-align:center;'>Hemen Başlayın</h3>", unsafe_allow_html=True)
@@ -205,4 +301,5 @@ elif menu == "🛡️ Güvenlik Kontrolü":
     if st.button("Sorgula"):
         if check_predatory(j_name): st.error("⚠️ RİSKLİ DERGİ!")
         else: st.success("✅ Temiz görünüyor.")
+
 
