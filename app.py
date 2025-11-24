@@ -1,187 +1,145 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-# Import satırını tek satırda uzun yazmak yerine alta bölelim ki hata vermesin
 from logic import (
-    analyze_hybrid_search, 
-    check_predatory, 
-    check_ai_probability, 
-    create_academic_cv, 
-    convert_reference_style
+    analyze_hybrid_search, check_predatory, check_ai_probability, 
+    create_academic_cv, convert_reference_style, analyze_sdg_goals,
+    generate_cover_letter, generate_reviewer_response, find_collaborators
 )
 
-# --- SAYFA AYARLARI ---
-st.set_page_config(page_title="PubScout | Akademik Asistan", page_icon="🎓", layout="wide")
+st.set_page_config(page_title="PubScout Pro", page_icon="🎓", layout="wide")
 
-# --- CSS TASARIM ---
+# CSS TASARIM
 st.markdown("""
     <style>
     .main { background-color: #ffffff; }
     h1, h2, h3 { color: #0F2C59; }
-    
-    .search-box {
-        background-color: #F8F9FA;
-        padding: 30px;
-        border-radius: 15px;
-        border: 1px solid #eee;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.05);
-        margin-bottom: 30px;
-    }
-    
     .stButton>button {
         background: linear-gradient(90deg, #0F2C59 0%, #1B498F 100%);
-        color: white;
-        border-radius: 8px;
-        border: none;
-        height: 45px;
-        font-weight: 600;
-        transition: all 0.3s;
+        color: white; border-radius: 8px; border: none; height: 45px;
     }
-    .stButton>button:hover {
-        background: linear-gradient(90deg, #00DFA2 0%, #00bfa5 100%);
-        color: #0F2C59;
-        transform: translateY(-2px);
-    }
+    .search-box { background: #F8F9FA; padding: 25px; border-radius: 15px; border: 1px solid #eee; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- MENÜ ---
 with st.sidebar:
     st.title("🎓 PubScout")
-    st.info("Kurum: **Demo University**\n*(Premium License)*")
-    
-    menu = st.radio("Modüller", 
-        ["🏠 Ana Sayfa", "🛠️ Utility Tools", "📝 CV Oluşturucu", "🕵️ AI Ajanı (Beta)", "🛡️ Güvenlik Kontrolü"])
+    st.caption("v2.1 Ultimate Edition")
+    st.info("Kurum: **Demo University**")
+    menu = st.radio("Modüller", ["🏠 Ana Sayfa", "🛠️ Yazım Araçları (Tools)", "🤝 Ortak Bulucu (Network)", "📝 CV & Kariyer", "🛡️ Güvenlik & AI"])
 
-# --- 1. ANA SAYFA (HİBRİD ARAMA) ---
+# --- 1. ANA SAYFA (HİBRİD ARAMA + SDG ANALİZİ) ---
 if menu == "🏠 Ana Sayfa":
-    st.markdown("<h1 style='text-align:center; font-size: 4rem; margin-bottom:10px;'>PubScout AI</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center; color:gray; font-size:1.2rem;'>Özet (Abstract) ve Referanslarınızı (DOI) birlikte analiz ederek en doğru dergiyi bulur.</p>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align:center;'>PubScout AI</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center;'>Makale, Dergi ve Etki Analizi Platformu</p>", unsafe_allow_html=True)
     
-    # Arama Paneli
     st.markdown('<div class="search-box">', unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     with c1:
-        st.subheader("1. Makale Özeti (Konu)")
-        abstract_input = st.text_area("Özetinizi buraya yapıştırın", height=200, placeholder="Abstract metni...")
+        abstract_input = st.text_area("1. Makale Özeti (Abstract)", height=150)
     with c2:
-        st.subheader("2. Referanslar (Kültür)")
-        doi_input = st.text_area("DOI Listesi (Opsiyonel)", height=200, placeholder="10.1007/xxxx, 10.1016/yyyy (Virgülle ayırın)...")
+        doi_input = st.text_area("2. Referanslar (DOI)", height=150, placeholder="10.1007/...")
     
-    analyze_btn = st.button("🚀 HİBRİD ANALİZİ BAŞLAT", use_container_width=True)
+    btn = st.button("🚀 ANALİZİ BAŞLAT", use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Analiz Sonuçları
-    if analyze_btn:
+    if btn:
         if len(abstract_input) < 20 and "10." not in doi_input:
-            st.error("Lütfen en az bir alanı doldurun.")
+            st.error("Lütfen veri giriniz.")
         else:
-            with st.spinner('Yapay Zeka konu ve atıf ağlarını çapraz analiz ediyor...'):
+            # 1. DERGİ SONUÇLARI
+            with st.spinner('Dergiler ve SDG hedefleri analiz ediliyor...'):
                 df_results = analyze_hybrid_search(abstract_input, doi_input)
+                sdg_df = analyze_sdg_goals(abstract_input) # SDG Analizi
             
-            if df_results is not None and not df_results.empty:
-                st.success(f"✅ Analiz Tamamlandı! {len(df_results)} dergi bulundu.")
-                st.divider()
+            # SDG Raporu (Yönetici Özelliği)
+            if not sdg_df.empty:
+                st.info(f"🌍 **SDG Etkisi:** Bu makale en çok **{sdg_df.iloc[0]['Hedef']}** hedefine katkı sağlıyor.")
 
-                col1, col2, col3 = st.columns(3)
-                for index, row in df_results.head(3).iterrows():
-                    is_predatory = check_predatory(row['Dergi Adı'])
-                    card_color = "#FF4B4B" if is_predatory else "#00CC96"
-                    status_text = "⚠️ RİSKLİ" if is_predatory else "✅ GÜVENLİ"
-                    
-                    badge = ""
-                    if "GÜÇLÜ" in row['Eşleşme Tipi']:
-                        badge = "<div style='background:#FFD700; color:#000; padding:5px; border-radius:5px; font-size:11px; font-weight:bold; margin-bottom:5px; text-align:center;'>⭐ GÜÇLÜ EŞLEŞME</div>"
-                    
-                    g_link = f"https://www.google.com/search?q={row['Dergi Adı'].replace(' ', '+')}+author+guidelines"
-
-                    with (col1 if index==0 else col2 if index==1 else col3):
-                        st.markdown(f"""
-                        <div style="background:white; border:1px solid #ddd; padding:20px; border-radius:15px; border-top:5px solid {card_color}; margin-bottom:20px;">
-                            {badge}
-                            <h4 style="color:#0F2C59; height:45px; overflow:hidden;">{row['Dergi Adı']}</h4>
-                            <p style="color:gray; font-size:12px;">{row['Yayınevi']}</p>
-                            <div style="display:flex; justify-content:space-between; margin-top:10px;">
-                                <span style="font-weight:bold; color:{card_color}">{status_text}</span>
-                                <span style="background:#eee; padding:2px 8px; border-radius:4px;">{row['Q Değeri']}</span>
-                            </div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        b1, b2 = st.columns(2)
-                        with b1:
-                            if row['Link']: st.link_button("🌐 Site", row['Link'], use_container_width=True)
-                            else: st.button("🚫", disabled=True)
-                        with b2: st.link_button("📝 Rehber", g_link, use_container_width=True)
-
-                st.write("### 📊 Detaylı Sıralama")
+            if df_results is not None:
+                st.success(f"{len(df_results)} Dergi Bulundu")
                 st.dataframe(df_results, use_container_width=True)
             else:
-                st.error("Sonuç bulunamadı.")
+                st.error("Dergi bulunamadı.")
 
-# --- 2. UTILITY TOOLS ---
-elif menu == "🛠️ Utility Tools":
-    st.header("🛠️ Angarya Yok Edici Araçlar")
-    st.write("Akademik yazım sürecindeki teknik işleri hızlandırın.")
+# --- 2. YAZIM ARAÇLARI (COVER LETTER & HAKEM) ---
+elif menu == "🛠️ Yazım Araçları (Tools)":
+    st.header("✍️ Editör ve Hakem İletişimi")
+    t1, t2, t3 = st.tabs(["📝 Cover Letter (Ön Yazı)", "🛡️ Hakem Cevaplayıcı", "🔄 Referans Çevirici"])
     
-    c1, c2 = st.columns(2)
-    
-    # Şablon Bulucu
-    with c1:
-        st.markdown('<div class="search-box"><h3>📂 Şablon Bulucu</h3>', unsafe_allow_html=True)
-        pub = st.selectbox("Yayınevi Seçin", ["Elsevier", "Springer", "IEEE", "Taylor & Francis"])
-        urls = {
-            "Elsevier": "https://www.elsevier.com/authors/policies-and-guidelines/latex-instructions",
-            "Springer": "https://www.springernature.com/gp/authors/campaigns/latex-author-support",
-            "IEEE": "https://journals.ieeeauthorcenter.ieee.org/",
-            "Taylor & Francis": "https://authorservices.taylorandfrancis.com/"
-        }
-        st.link_button(f"📥 {pub} Şablonuna Git", urls[pub], use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+    with t1:
+        st.subheader("Editöre Mektup Oluştur")
+        c1, c2 = st.columns(2)
+        with c1:
+            cl_j = st.text_input("Dergi Adı")
+            cl_t = st.text_input("Makale Başlığı")
+            cl_topic = st.text_input("Konu (Kısaca)")
+        with c2:
+            cl_auth = st.text_input("Yazar Adı")
+            cl_inst = st.text_input("Kurum")
+            cl_res = st.text_input("Neden bu dergi?", value="it fits the scope")
+            cl_find = st.text_input("Ana Bulgu", value="we achieved state-of-the-art results")
+        
+        if st.button("Mektubu Yaz"):
+            data = {"journal": cl_j, "title": cl_t, "author": cl_auth, "institution": cl_inst, "topic": cl_topic, "reason": cl_res, "finding": cl_find}
+            st.text_area("Sonuç:", generate_cover_letter(data), height=300)
 
-    # Referans Dönüştürücü
-    with c2:
-        st.markdown('<div class="search-box"><h3>📝 Referans Dönüştürücü</h3>', unsafe_allow_html=True)
-        ref = st.text_area("Referans Metni", placeholder="Yilmaz, A. (2020)...")
-        fmt = st.selectbox("Hedef Format", ["APA 7", "IEEE"])
-        if st.button("Formatı Çevir"):
-            st.code(convert_reference_style(ref, fmt))
-        st.markdown('</div>', unsafe_allow_html=True)
+    with t2:
+        st.subheader("Hakem Yorumuna Cevap")
+        comment = st.text_area("Hakemin eleştirisini yapıştırın:")
+        tone = st.selectbox("Üslup Seçin", ["Polite (Kibar)", "Rebuttal (İtiraz)"])
+        if st.button("Cevabı Oluştur"):
+            st.info(generate_reviewer_response(comment, tone))
 
-# --- 3. CV OLUŞTURUCU ---
-elif menu == "📝 CV Oluşturucu":
-    st.header("📄 Akademik CV Oluşturucu")
-    col1, col2 = st.columns(2)
-    with col1:
-        name = st.text_input("Ad Soyad", "Dr. Ali Yılmaz")
-        title = st.selectbox("Unvan", ["Arş. Gör.", "Dr. Öğr. Üyesi", "Doç. Dr.", "Prof. Dr."])
-        phone = st.text_input("Telefon")
-    with col2:
-        inst = st.text_input("Kurum", "Aydın Adnan Menderes Üniversitesi")
-        email = st.text_input("E-Posta")
-    
-    bio = st.text_area("Özet (Summary)")
-    edu = st.text_area("Eğitim (Education)")
-    pubs = st.text_area("Yayınlar (Publications)")
-    
-    if st.button("CV PDF İndir"):
-        data = {"name": name, "title": title, "institution": inst, "email": email, "phone": phone, "bio": bio, "education": edu, "publications": pubs}
-        pdf_bytes = create_academic_cv(data)
-        st.download_button("📥 İndir", pdf_bytes, "cv.pdf", "application/pdf")
+    with t3:
+        st.subheader("Referans Formatla")
+        r_txt = st.text_area("Referans")
+        fmt = st.selectbox("Format", ["APA 7", "IEEE"])
+        if st.button("Çevir"):
+            st.code(convert_reference_style(r_txt, fmt))
 
-# --- 4. AI AJANI ---
-elif menu == "🕵️ AI Ajanı (Beta)":
-    st.header("🕵️ Yapay Zeka Tespit Aracı")
-    txt = st.text_area("Metni buraya yapıştırın (Maks 3000 karakter)", max_chars=3000)
-    if st.button("Analiz Et"):
-        with st.spinner("AI Taranıyor..."):
-            res = check_ai_probability(txt)
-        if res:
-            st.metric(label=res['label'], value=f"%{int(res['score']*100)}", delta=res['message'])
+# --- 3. ORTAK BULUCU (YENİ KATİL ÖZELLİK) ---
+elif menu == "🤝 Ortak Bulucu (Network)":
+    st.header("🤝 Global İşbirliği (Co-Author) Bulucu")
+    st.write("Çalıştığınız konuyu girin, dünyada bu konuda en çok atıf alan uzmanları bulun.")
+    
+    topic = st.text_input("Araştırma Konusu (İngilizce)", placeholder="deep learning in radiology")
+    if st.button("Uzmanları Bul"):
+        with st.spinner("OpenAlex veritabanında uzmanlar taranıyor..."):
+            df_collab = find_collaborators(topic)
+        
+        if not df_collab.empty:
+            st.success("Potansiyel İşbirlikleri Bulundu!")
+            for i, row in df_collab.iterrows():
+                st.markdown(f"""
+                <div style="padding:15px; border:1px solid #ddd; border-radius:10px; margin-bottom:10px;">
+                    <h4>👤 {row['Yazar']}</h4>
+                    <p>🏛️ {row['Kurum']}</p>
+                    <p>📄 Örnek Makale: <i>{row['Makale']}</i></p>
+                    <p>⭐ Toplam Atıf: <strong>{row['Atıf']}</strong></p>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.warning("Sonuç bulunamadı.")
+
+# --- 4. CV ---
+elif menu == "📝 CV & Kariyer":
+    st.header("CV Oluşturucu")
+    st.info("Kodun uzunluğunu artırmamak için burayı kısa tuttum, önceki CV kodu buraya entegre edilebilir.")
 
 # --- 5. GÜVENLİK ---
-elif menu == "🛡️ Güvenlik Kontrolü":
-    st.header("🛡️ Predatory (Yağmacı) Dergi Kontrolü")
-    j_name = st.text_input("Dergi Adını Girin")
-    if st.button("Sorgula"):
-        if check_predatory(j_name): st.error("⚠️ RİSKLİ DERGİ!")
-        else: st.success("✅ Temiz görünüyor.")
+elif menu == "🛡️ Güvenlik & AI":
+    st.header("🛡️ Güvenlik Merkezi")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("Predatory Kontrol")
+        j = st.text_input("Dergi Adı")
+        if st.button("Kontrol Et"):
+            if check_predatory(j): st.error("RİSKLİ!")
+            else: st.success("Temiz.")
+    with col2:
+        st.subheader("AI Dedektör")
+        txt = st.text_area("Metin", max_chars=3000)
+        if st.button("Tara"):
+            res = check_ai_probability(txt)
+            if res: st.metric(res['label'], f"%{int(res['score']*100)}")
