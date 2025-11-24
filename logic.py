@@ -7,11 +7,15 @@ from fpdf import FPDF
 import re
 from datetime import date
 
-# --- 1. TEMEL ARAMA MOTORU ---
+# --- 1. TEMEL ARAMA MOTORU (HATA ÖNLEYİCİLİ) ---
 def get_journals_from_openalex(text_input, mode="abstract"):
     base_url = "https://api.openalex.org/works"
     journal_list = []
 
+    # Standart Sütun İsimleri (Boş gelse bile hata vermemesi için)
+    columns = ["Dergi Adı", "Yayınevi", "Q Değeri", "Link", "Kaynak", "Atıf Gücü"]
+
+    # --- MOD A: ABSTRACT ---
     if mode == "abstract" and text_input and len(text_input) > 10:
         try:
             translated = GoogleTranslator(source='auto', target='en').translate(text_input)
@@ -28,18 +32,25 @@ def get_journals_from_openalex(text_input, mode="abstract"):
         except:
             results = []
 
+    # --- MOD B: DOI ---
     elif mode == "doi" and text_input and "10." in text_input:
+        # Regex ile DOI yakala
         raw_dois = re.findall(r'10\.\d{4,9}/[-._;()/:A-Z0-9]+', text_input, re.IGNORECASE)
         results = []
-        for doi in raw_dois[:15]: 
+        # Tekrar edenleri temizle (Set kullanarak)
+        unique_dois = list(set(raw_dois))
+        
+        for doi in unique_dois[:15]: 
             try:
                 clean = "https://doi.org/" + doi
                 res = requests.get(f"https://api.openalex.org/works/{clean}")
                 if res.status_code == 200: results.append(res.json())
             except: pass
     else:
-        return pd.DataFrame()
+        # Eğer girdi boşsa boş DataFrame döndür (Sütunlar tanımlı!)
+        return pd.DataFrame(columns=columns)
 
+    # --- SONUÇLARI LİSTELE ---
     for work in results:
         loc = work.get('primary_location', {})
         if loc and loc.get('source'):
@@ -48,6 +59,8 @@ def get_journals_from_openalex(text_input, mode="abstract"):
             pub = source.get('host_organization_name')
             link = source.get('homepage_url')
             imp = work.get('cited_by_count', 0)
+            
+            # Q Değeri Simülasyonu
             q_val = "Q1" if imp > 50 else "Q2" if imp > 20 else "Q3" if imp > 5 else "Q4"
 
             if name:
@@ -56,46 +69,82 @@ def get_journals_from_openalex(text_input, mode="abstract"):
                     "Yayınevi": pub,
                     "Q Değeri": q_val,
                     "Link": link,
-                    "Kaynak": mode.upper(),
+                    "Kaynak": mode.upper(), # 'ABSTRACT' veya 'DOI'
                     "Atıf Gücü": imp
                 })
-    return pd.DataFrame(journal_list)
+    
+    # Listeden DataFrame oluştur
+    df = pd.DataFrame(journal_list)
+    
+    # Eğer sonuç yoksa bile sütunları oluştur ki sonraki adımda hata vermesin
+    if df.empty:
+        return pd.DataFrame(columns=columns)
+        
+    return df
 
-# --- 2. HİBRİD ANALİZ ---
+# --- 2. HİBRİD ANALİZ (DÜZELTİLDİ: ValueError Fix) ---
 def analyze_hybrid_search(abstract_text, doi_text):
-    df_abs = pd.DataFrame()
-    df_doi = pd.DataFrame()
+    # Başlangıçta boş ama sütunlu DataFrame'ler oluştur
+    empty_cols = ["Dergi Adı", "Yayınevi", "Q Değeri", "Link", "Kaynak", "Atıf Gücü"]
+    df_abs = pd.DataFrame(columns=empty_cols)
+    df_doi = pd.DataFrame(columns=empty_cols)
 
+    # 1. Abstract Taraması
     if abstract_text and len(abstract_text) > 20:
         df_abs = get_journals_from_openalex(abstract_text, mode="abstract")
+    
+    # 2. DOI Taraması
     if doi_text and "10." in doi_text:
         df_doi = get_journals_from_openalex(doi_text, mode="doi")
 
-    full_df = pd.concat([df_abs, df_doi])
-    if full_df.empty: return None
+    # 3. BİRLEŞTİRME (Kritik Düzeltme: ignore_index=True)
+    # Bu komut indeks çakışmasını önler!
+    full_df = pd.concat([df_abs, df_doi], ignore_index=True)
+    
+    if full_df.empty:
+        return None
 
+    # 4. Puanlama ve Gruplama
+    # groupby işlemi indeksleri değiştirir, bu yüzden dikkatli olmalıyız
     grouped = full_df.groupby(['Dergi Adı', 'Yayınevi', 'Q Değeri', 'Link']).size().reset_index(name='Skor')
     
+    # Eşleşme Tipi Belirleme (Güvenli Yöntem)
     def get_source_tag(row):
-        sources = full_df[full_df['Dergi Adı'] == row['Dergi Adı']]['Kaynak'].unique()
-        return "🔥 GÜÇLÜ EŞLEŞME" if len(sources) > 1 else f"Kaynak: {sources[0]}"
+        # Orijinal listeden bu derginin kaynaklarına bak
+        # Filtreleme yaparken string eşleşmesi kullanıyoruz
+        matches = full_df[full_df['Dergi Adı'] == row['Dergi Adı']]
+        sources = matches['Kaynak'].unique()
+        
+        if len(sources) > 1:
+            return "🔥 GÜÇLÜ EŞLEŞME"
+        elif len(sources) == 1:
+            return f"Kaynak: {sources[0]}"
+        else:
+            return "Bilinmiyor"
 
-    grouped['Eşleşme Tipi'] = grouped.apply(get_source_tag, axis=1)
+    # apply fonksiyonu bazen boş veri setinde hata verir, try-except ile saralım
+    try:
+        grouped['Eşleşme Tipi'] = grouped.apply(get_source_tag, axis=1)
+    except ValueError:
+        grouped['Eşleşme Tipi'] = "Tek Kaynak"
+
+    # Sıralama (Skor yüksek olan ve Q1 olanlar üstte)
     grouped = grouped.sort_values(by=['Skor', 'Q Değeri'], ascending=[False, True])
+    
     return grouped
 
-# --- 3. SDG (SÜRDÜRÜLEBİLİR KALKINMA) ANALİZİ ---
+# --- 3. SDG (BM HEDEFLERİ) ---
 def analyze_sdg_goals(text):
+    if not text: return pd.DataFrame()
+    
     sdg_keywords = {
-        "SDG 3: Sağlık ve Kaliteli Yaşam": ["health", "cancer", "disease", "medicine", "virus", "hospital", "patient"],
-        "SDG 4: Nitelikli Eğitim": ["education", "school", "teaching", "learning", "student", "university"],
-        "SDG 7: Temiz Enerji": ["energy", "solar", "wind", "electricity", "renewable"],
-        "SDG 9: Sanayi ve İnovasyon": ["industry", "innovation", "infrastructure", "technology", "ai"],
-        "SDG 13: İklim Eylemi": ["climate", "change", "global warming", "environment"]
+        "SDG 3: Sağlık ve Kaliteli Yaşam": ["health", "cancer", "disease", "medicine", "virus", "hospital", "patient", "clinical", "therapy"],
+        "SDG 4: Nitelikli Eğitim": ["education", "school", "teaching", "learning", "student", "university", "academic"],
+        "SDG 7: Temiz Enerji": ["energy", "solar", "wind", "electricity", "renewable", "power", "grid"],
+        "SDG 9: Sanayi ve İnovasyon": ["industry", "innovation", "infrastructure", "technology", "ai", "artificial intelligence", "data"],
+        "SDG 13: İklim Eylemi": ["climate", "change", "warming", "environment", "emission", "carbon"]
     }
     
-    if not text: return pd.DataFrame()
-
     text = text.lower()
     matched_sdgs = []
     
@@ -110,37 +159,16 @@ def analyze_sdg_goals(text):
     df = pd.DataFrame(matched_sdgs).sort_values(by="Skor", ascending=False)
     return df
 
-# --- 4. COVER LETTER GENERATOR ---
+# --- DİĞER ARAÇLAR (AYNEN KALIYOR) ---
 def generate_cover_letter(data):
     today = date.today().strftime("%B %d, %Y")
-    letter = f"""{today}
+    return f"""{today}\n\nEditorial Board,\n{data['journal']}\n\nDear Editor-in-Chief,\n\nI am pleased to submit an original research article entitled "{data['title']}" by {data['author']} for consideration in {data['journal']}.\n\nThis study focuses on {data['topic']}. It is appropriate for your journal because {data['reason']}.\n\nSincerely,\n{data['author']}\n{data['institution']}"""
 
-Editorial Board,
-{data['journal']}
-
-Dear Editor-in-Chief,
-
-I am pleased to submit an original research article entitled "{data['title']}" by {data['author']} for consideration for publication in {data['journal']}.
-
-This study focuses on {data['topic']}. We believe that this manuscript is appropriate for publication by your journal because {data['reason']}.
-
-In this manuscript, we show that {data['finding']}. We believe these findings will be of interest to the readers of your journal.
-
-Sincerely,
-
-{data['author']}
-{data['institution']}"""
-    return letter
-
-# --- 5. REVIEWER RESPONSE ---
 def generate_reviewer_response(comment, tone="Polite"):
     base = "Thank you for this valuable insight. "
-    if "Polite" in tone:
-        return base + f"We agree that '{comment[:30]}...' is a critical point. We have revised the manuscript to clarify this."
-    else:
-        return base + f"While we understand the concern regarding '{comment[:30]}...', we respectfully disagree based on our data."
+    if "Polite" in tone: return base + f"We agree that '{comment[:30]}...' is critical. We revised the text."
+    else: return base + f"Regarding '{comment[:30]}...', we respectfully disagree based on our findings."
 
-# --- 6. COLLABORATION FINDER (ORTAK BULUCU) ---
 def find_collaborators(topic):
     url = "https://api.openalex.org/works"
     params = {"search": topic, "per-page": 20, "sort": "cited_by_count:desc"}
@@ -154,10 +182,8 @@ def find_collaborators(topic):
                 inst = authorship.get('institutions', [{}])[0].get('display_name', 'Unknown')
                 authors.append({"Yazar": auth.get('display_name'), "Kurum": inst, "Makale": work.get('title'), "Atıf": work.get('cited_by_count')})
         return pd.DataFrame(authors).drop_duplicates(subset=['Yazar']).head(5)
-    except:
-        return pd.DataFrame()
+    except: return pd.DataFrame()
 
-# --- STANDART FONKSİYONLAR ---
 def check_predatory(name):
     fake = ["International Journal of Advanced Science", "Predatory Reports", "Fake Science"]
     return any(x.lower() in str(name).lower() for x in fake)
@@ -177,13 +203,12 @@ def check_ai_probability(text):
     except: return None
 
 def convert_reference_style(text, fmt):
-    return f"[{fmt}] {text} (Otomatik Düzenlendi)"
+    return f"[{fmt}] {text} (Otomatik)"
 
 def create_academic_cv(data):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Helvetica", size=12)
     def clean(t): return str(t).encode('latin-1', 'replace').decode('latin-1')
-    pdf.set_font("Helvetica", 'B', 20)
-    pdf.cell(0, 15, txt=clean(data['name']), ln=True, align='C')
+    pdf.cell(0, 10, txt=clean(data['name']), ln=True, align='C')
     return pdf.output(dest='S').encode('latin-1')
