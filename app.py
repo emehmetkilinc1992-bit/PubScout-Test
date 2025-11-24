@@ -1,7 +1,14 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from logic import analyze_hybrid_search, check_predatory, check_ai_probability, create_academic_cv, convert_reference_style
+# Import satırını tek satırda uzun yazmak yerine alta bölelim ki hata vermesin
+from logic import (
+    analyze_hybrid_search, 
+    check_predatory, 
+    check_ai_probability, 
+    create_academic_cv, 
+    convert_reference_style
+)
 
 # --- SAYFA AYARLARI ---
 st.set_page_config(page_title="PubScout | Akademik Asistan", page_icon="🎓", layout="wide")
@@ -12,7 +19,6 @@ st.markdown("""
     .main { background-color: #ffffff; }
     h1, h2, h3 { color: #0F2C59; }
     
-    /* Arama Paneli */
     .search-box {
         background-color: #F8F9FA;
         padding: 30px;
@@ -22,7 +28,6 @@ st.markdown("""
         margin-bottom: 30px;
     }
     
-    /* Butonlar */
     .stButton>button {
         background: linear-gradient(90deg, #0F2C59 0%, #1B498F 100%);
         color: white;
@@ -45,7 +50,6 @@ with st.sidebar:
     st.title("🎓 PubScout")
     st.info("Kurum: **Demo University**\n*(Premium License)*")
     
-    # MENÜ SEÇENEKLERİ (Burada tüm modüller var)
     menu = st.radio("Modüller", 
         ["🏠 Ana Sayfa", "🛠️ Utility Tools", "📝 CV Oluşturucu", "🕵️ AI Ajanı (Beta)", "🛡️ Güvenlik Kontrolü"])
 
@@ -114,7 +118,7 @@ if menu == "🏠 Ana Sayfa":
             else:
                 st.error("Sonuç bulunamadı.")
 
-# --- 2. UTILITY TOOLS (GERİ GELDİ) ---
+# --- 2. UTILITY TOOLS ---
 elif menu == "🛠️ Utility Tools":
     st.header("🛠️ Angarya Yok Edici Araçlar")
     st.write("Akademik yazım sürecindeki teknik işleri hızlandırın.")
@@ -143,7 +147,7 @@ elif menu == "🛠️ Utility Tools":
             st.code(convert_reference_style(ref, fmt))
         st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 3. CV OLUŞTURUCU (GERİ GELDİ) ---
+# --- 3. CV OLUŞTURUCU ---
 elif menu == "📝 CV Oluşturucu":
     st.header("📄 Akademik CV Oluşturucu")
     col1, col2 = st.columns(2)
@@ -164,7 +168,7 @@ elif menu == "📝 CV Oluşturucu":
         pdf_bytes = create_academic_cv(data)
         st.download_button("📥 İndir", pdf_bytes, "cv.pdf", "application/pdf")
 
-# --- 4. AI AJANI (GERİ GELDİ) ---
+# --- 4. AI AJANI ---
 elif menu == "🕵️ AI Ajanı (Beta)":
     st.header("🕵️ Yapay Zeka Tespit Aracı")
     txt = st.text_area("Metni buraya yapıştırın (Maks 3000 karakter)", max_chars=3000)
