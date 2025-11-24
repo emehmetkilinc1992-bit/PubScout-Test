@@ -26,14 +26,39 @@ with st.sidebar:
 
 # --- 1. ANA SAYFA ---
 if menu == "🏠 Ana Sayfa":
-    st.markdown("<h1 style='text-align: center;'>🚀 Yayın Sürecinizi Hızlandırın</h1>", unsafe_allow_html=True)
-    st.write("###")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("İndeksli Dergi", "85,000+")
-    c2.metric("Şablon Desteği", "Global")
-    c3.metric("Kullanıcı Memnuniyeti", "%98")
     
-    st.image("https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&q=80", use_container_width=True)
+    # 1. GÖRSELİ YERLEŞTİRME
+    # use_container_width=True sayesinde resim ekranın genişliğine tam oturur.
+    st.image("banner.jpg", use_container_width=True)
+    
+    # 2. ALTINA GERÇEK BAŞLIK VE METİNLER
+    st.markdown("""
+    <div style="text-align:center; margin-top:-20px;">
+        <h1 style="color:#0F2C59; font-size: 3rem;">PubScout</h1>
+        <p style="font-size:1.5rem; color:#555;">Makaleniz için en doğru evi bulun.</p>
+        <p style="color:#888;">Bürokrasiyle değil, bilimle uğraşın. Yapay zeka destekli asistanınız.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.write("###") # Biraz boşluk
+    
+    # 3. METRİKLER (Görselin altına şık durur)
+    c1, c2, c3 = st.columns(3)
+    # Metrikleri görselleştirmek için arka plan rengi ekleyelim
+    with c1:
+        st.markdown('<div style="background:#e3f2fd; padding:15px; border-radius:10px; text-align:center;"><h3>📚 85,000+</h3><p>İndeksli Dergi</p></div>', unsafe_allow_html=True)
+    with c2:
+        st.markdown('<div style="background:#e0f2f1; padding:15px; border-radius:10px; text-align:center;"><h3>🌍 Global</h3><p>Şablon Desteği</p></div>', unsafe_allow_html=True)
+    with c3:
+        st.markdown('<div style="background:#fce4ec; padding:15px; border-radius:10px; text-align:center;"><h3>🛡️ %100</h3><p>Güvenli Yayın</p></div>', unsafe_allow_html=True)
+    
+    st.divider()
+    
+    # 4. HIZLI AKSİYON BUTONU
+    st.markdown("<h3 style='text-align:center;'>Hemen Başlayın</h3>", unsafe_allow_html=True)
+    col_center = st.columns([1, 2, 1])
+    with col_center[1]:
+        st.info("👈 Sol menüden **'Dergi Bulucu'** modülünü seçerek analize başlayabilirsiniz.")
 
 # --- 2. DERGİ BULUCU (CORE) ---
 elif menu == "🔍 Dergi Bulucu (Core)":
@@ -180,3 +205,4 @@ elif menu == "🛡️ Güvenlik Kontrolü":
     if st.button("Sorgula"):
         if check_predatory(j_name): st.error("⚠️ RİSKLİ DERGİ!")
         else: st.success("✅ Temiz görünüyor.")
+
