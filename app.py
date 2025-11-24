@@ -22,7 +22,7 @@ with st.sidebar:
     st.title("🎓 PubScout")
     st.info("Kurum: **Demo University**\n*(Premium License)*")
     menu = st.radio("Modüller", 
-        ["🏠 Ana Sayfa", "🔍 Dergi Bulucu (Core)", "🛠️ Utility Tools", "📝 CV Oluşturucu", "🕵️ AI Ajanı (Beta)", "📊 Yönetici Paneli", "🛡️ Güvenlik Kontrolü"])
+        ["🏠 Ana Sayfa", "🛠️ Utility Tools", "📝 CV Oluşturucu", "🕵️ AI Ajanı (Beta)", "📊 Yönetici Paneli", "🛡️ Güvenlik Kontrolü"])
 
 # --- 1. ANA SAYFA (BANNER + DERGİ BULUCU BİR ARADA) ---
 if menu == "🏠 Ana Sayfa":
@@ -326,6 +326,7 @@ elif menu == "🛡️ Güvenlik Kontrolü":
     if st.button("Sorgula"):
         if check_predatory(j_name): st.error("⚠️ RİSKLİ DERGİ!")
         else: st.success("✅ Temiz görünüyor.")
+
 
 
 
