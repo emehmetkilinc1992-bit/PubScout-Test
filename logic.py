@@ -81,4 +81,109 @@ def analyze_hybrid_search(abstract_text, doi_text):
         return "🔥 GÜÇLÜ EŞLEŞME" if len(sources) > 1 else f"Kaynak: {sources[0]}"
 
     grouped['Eşleşme Tipi'] = grouped.apply(get_source_tag, axis=1)
-    grouped = grouped.sort_values(by=['Skor', 'Q Değeri'], ascending=[False,
+    grouped = grouped.sort_values(by=['Skor', 'Q Değeri'], ascending=[False, True])
+    return grouped
+
+# --- 3. SDG (SÜRDÜRÜLEBİLİR KALKINMA) ANALİZİ ---
+def analyze_sdg_goals(text):
+    sdg_keywords = {
+        "SDG 3: Sağlık ve Kaliteli Yaşam": ["health", "cancer", "disease", "medicine", "virus", "hospital", "patient"],
+        "SDG 4: Nitelikli Eğitim": ["education", "school", "teaching", "learning", "student", "university"],
+        "SDG 7: Temiz Enerji": ["energy", "solar", "wind", "electricity", "renewable"],
+        "SDG 9: Sanayi ve İnovasyon": ["industry", "innovation", "infrastructure", "technology", "ai"],
+        "SDG 13: İklim Eylemi": ["climate", "change", "global warming", "environment"]
+    }
+    
+    if not text: return pd.DataFrame()
+
+    text = text.lower()
+    matched_sdgs = []
+    
+    for sdg, keywords in sdg_keywords.items():
+        score = sum(1 for word in keywords if word in text)
+        if score > 0:
+            matched_sdgs.append({"Hedef": sdg, "Skor": score})
+            
+    if not matched_sdgs:
+        return pd.DataFrame()
+        
+    df = pd.DataFrame(matched_sdgs).sort_values(by="Skor", ascending=False)
+    return df
+
+# --- 4. COVER LETTER GENERATOR ---
+def generate_cover_letter(data):
+    today = date.today().strftime("%B %d, %Y")
+    letter = f"""{today}
+
+Editorial Board,
+{data['journal']}
+
+Dear Editor-in-Chief,
+
+I am pleased to submit an original research article entitled "{data['title']}" by {data['author']} for consideration for publication in {data['journal']}.
+
+This study focuses on {data['topic']}. We believe that this manuscript is appropriate for publication by your journal because {data['reason']}.
+
+In this manuscript, we show that {data['finding']}. We believe these findings will be of interest to the readers of your journal.
+
+Sincerely,
+
+{data['author']}
+{data['institution']}"""
+    return letter
+
+# --- 5. REVIEWER RESPONSE ---
+def generate_reviewer_response(comment, tone="Polite"):
+    base = "Thank you for this valuable insight. "
+    if "Polite" in tone:
+        return base + f"We agree that '{comment[:30]}...' is a critical point. We have revised the manuscript to clarify this."
+    else:
+        return base + f"While we understand the concern regarding '{comment[:30]}...', we respectfully disagree based on our data."
+
+# --- 6. COLLABORATION FINDER (ORTAK BULUCU) ---
+def find_collaborators(topic):
+    url = "https://api.openalex.org/works"
+    params = {"search": topic, "per-page": 20, "sort": "cited_by_count:desc"}
+    try:
+        r = requests.get(url, params=params)
+        results = r.json().get('results', [])
+        authors = []
+        for work in results:
+            for authorship in work.get('authorships', [])[:1]:
+                auth = authorship.get('author', {})
+                inst = authorship.get('institutions', [{}])[0].get('display_name', 'Unknown')
+                authors.append({"Yazar": auth.get('display_name'), "Kurum": inst, "Makale": work.get('title'), "Atıf": work.get('cited_by_count')})
+        return pd.DataFrame(authors).drop_duplicates(subset=['Yazar']).head(5)
+    except:
+        return pd.DataFrame()
+
+# --- STANDART FONKSİYONLAR ---
+def check_predatory(name):
+    fake = ["International Journal of Advanced Science", "Predatory Reports", "Fake Science"]
+    return any(x.lower() in str(name).lower() for x in fake)
+
+@st.cache_resource
+def load_ai_detector():
+    return pipeline("text-classification", model="roberta-base-openai-detector")
+
+def check_ai_probability(text):
+    if not text or len(text) < 50: return None
+    try:
+        clf = load_ai_detector()
+        res = clf(text[:512])[0]
+        lbl = "Yapay Zeka (AI)" if res['label']=='Fake' else "İnsan"
+        clr = "#FF4B4B" if res['label']=='Fake' else "#00CC96"
+        return {"label": lbl, "score": res['score'], "color": clr}
+    except: return None
+
+def convert_reference_style(text, fmt):
+    return f"[{fmt}] {text} (Otomatik Düzenlendi)"
+
+def create_academic_cv(data):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", size=12)
+    def clean(t): return str(t).encode('latin-1', 'replace').decode('latin-1')
+    pdf.set_font("Helvetica", 'B', 20)
+    pdf.cell(0, 15, txt=clean(data['name']), ln=True, align='C')
+    return pdf.output(dest='S').encode('latin-1')
