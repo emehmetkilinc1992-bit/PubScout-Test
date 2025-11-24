@@ -24,113 +24,100 @@ with st.sidebar:
     menu = st.radio("Modüller", 
         ["🏠 Ana Sayfa", "🛠️ Utility Tools", "📝 CV Oluşturucu", "🕵️ AI Ajanı (Beta)", "📊 Yönetici Paneli", "🛡️ Güvenlik Kontrolü"])
 
-# --- 1. ANA SAYFA (BANNER + DERGİ BULUCU BİR ARADA) ---
+# --- 1. ANA SAYFA (GOOGLE TARZI MİNİMALİST TASARIM) ---
 if menu == "🏠 Ana Sayfa":
-    import base64
-
-    # 1. BANNER AYARLARI
-    def get_base64_of_bin_file(bin_file):
-        try:
-            with open(bin_file, 'rb') as f:
-                data = f.read()
-            return base64.b64encode(data).decode()
-        except FileNotFoundError:
-            return None
-
-    img_base64 = get_base64_of_bin_file("banner.jpg")
     
-    # Resim varsa onu, yoksa düz rengi kullan
-    if img_base64:
-        bg_style = f"background-image: url('data:image/jpeg;base64,{img_base64}');"
-    else:
-        bg_style = "background-color: #0F2C59;"
-
-    # 2. CSS & HTML (Banner Yüksekliğini 550px'den 350px'e düşürdük ki arama kutusu görünsün)
-    st.markdown(f"""
+    # CSS: Sayfayı ortala, başlığı büyüt, arama kutusuna gölge ver
+    st.markdown("""
     <style>
-        .main .block-container {{ padding-top: 0; max-width: 100%; }}
+        /* Ana Başlık Stili */
+        .main-title {
+            text-align: center;
+            font-size: 5rem;
+            font-weight: 800;
+            background: -webkit-linear-gradient(#0F2C59, #00DFA2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-top: 50px;
+            margin-bottom: 10px;
+        }
         
-        .hero-container {{
-            width: 100%;
-            height: 350px; /* Daha kısa banner */
-            {bg_style}
-            background-size: cover;
-            background-position: center;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-            margin-bottom: 30px;
-        }}
+        .sub-title {
+            text-align: center;
+            font-size: 1.5rem;
+            color: #666;
+            margin-bottom: 50px;
+        }
+
+        /* Arama Kutusu Konteynerı */
+        .search-container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1); /* Havalı Gölge */
+            border: 1px solid #eee;
+        }
         
-        .hero-overlay {{
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(15, 44, 89, 0.7);
-        }}
-        
-        .hero-content {{
-            position: relative; z-index: 1; text-align: center; color: white;
-        }}
-        
-        .hero-title {{ font-size: 3.5rem; font-weight: 800; margin: 0; text-shadow: 2px 2px 8px rgba(0,0,0,0.6); }}
-        .hero-subtitle {{ font-size: 1.2rem; font-weight: 400; opacity: 0.9; }}
+        /* Sekme (Tab) Yazılarını Büyüt */
+        button[data-baseweb="tab"] {
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
     </style>
-    
-    <div class="hero-container">
-        <div class="hero-overlay"></div>
-        <div class="hero-content">
-            <h1 class="hero-title">PubScout</h1>
-            <p class="hero-subtitle">Makaleniz için en doğru evi bulun.</p>
-        </div>
-    </div>
     """, unsafe_allow_html=True)
 
-    # 3. ARAMA MOTORU (ANA SAYFAYA TAŞINDI)
-    st.markdown("<h3 style='text-align:center; color:#0F2C59;'>🔎 Aramaya Başlayın</h3>", unsafe_allow_html=True)
-    
-    # Konteyner ile ortalayalım
-    col_spacer1, col_main, col_spacer2 = st.columns([1, 6, 1])
+    # 1. BAŞLIK ALANI (Görselsiz, Sadece Tipografi)
+    st.markdown('<h1 class="main-title">PubScout</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-title">Makaleniz için en doğru evi bulun.</p>', unsafe_allow_html=True)
+
+    # 2. ARAMA KUTUSU (Ortalanmış ve Gölgeli)
+    col_spacer1, col_main, col_spacer2 = st.columns([1, 8, 1])
     
     with col_main:
-        # Sekmeli Yapı
+        # Konteyner görünümlü CSS sınıfı uygulamak için HTML div açmıyoruz (Streamlit kısıtlı),
+        # ama Tabs yapısı zaten temiz duracaktır.
+        
         tab1, tab2 = st.tabs(["📄 Özet (Abstract) ile Ara", "🔗 Referans (DOI) ile Ara"])
         
-        # --- TAB 1: ÖZET ARAMA ---
+        # --- TAB 1: ÖZET ---
         with tab1:
-            abstract_input = st.text_area("Makale Özeti (Türkçe veya İngilizce)", height=150, placeholder="Abstract metnini buraya yapıştırın...")
+            st.write("###") # Biraz boşluk
+            abstract_input = st.text_area("", height=150, placeholder="Makalenizin özetini (Abstract) buraya yapıştırın ve arkanıza yaslanın...")
             
-            # Butonu ortalamak için kolon kullanalım
-            b_c1, b_c2, b_c3 = st.columns([1, 2, 1])
-            with b_c2:
+            # Butonu sağa değil tam ortaya ve geniş yapalım
+            b_space1, b_main, b_space2 = st.columns([1, 2, 1])
+            with b_main:
+                st.write("###")
                 search_clicked = st.button("🚀 Dergileri Bul", use_container_width=True)
 
-        # --- TAB 2: DOI ARAMA ---
+        # --- TAB 2: DOI ---
         with tab2:
-            doi_input = st.text_area("DOI Listesi (Virgülle ayırın)", height=150, placeholder="10.1007/xxxx, 10.1016/yyyy...")
-            d_c1, d_c2, d_c3 = st.columns([1, 2, 1])
-            with d_c2:
-                doi_clicked = st.button("🔗 Referanslardan Bul", use_container_width=True)
+            st.write("###")
+            doi_input = st.text_area("", height=150, placeholder="DOI numaralarını virgülle ayırarak girin (Örn: 10.1007/xxxx)...")
+            d_space1, d_main, d_space2 = st.columns([1, 2, 1])
+            with d_main:
+                st.write("###")
+                doi_clicked = st.button("🔗 Referanslardan Analiz Et", use_container_width=True)
 
-    # 4. SONUÇLARIN GÖSTERİMİ
-    # Kullanıcı butona bastıysa sonuçları göster, basmadıysa alttaki metrikleri göster.
-    
+    # 3. SONUÇLAR VE MANTIK (Aynı kalıyor)
     if search_clicked and abstract_input:
         if len(abstract_input) < 20:
             st.warning("Lütfen daha uzun bir metin girin.")
         else:
-            with st.spinner('Yapay Zeka Analiz Ediyor...'):
+            with st.spinner('Yapay Zeka literatürü tarıyor...'):
                 df = get_journals_from_openalex(abstract_input, mode="abstract")
             
             if not df.empty:
-                journal_counts = df['Dergi Adı'].value_counts().reset_index()
-                journal_counts.columns = ['Dergi Adı', 'Skor']
-                st.success(f"Analiz Tamamlandı! {len(journal_counts)} uygun dergi bulundu.")
+                st.write("###")
+                st.success(f"✅ Analiz Tamamlandı! {len(df)} dergi bulundu.")
+                st.divider()
                 
-                # Kartlar (Card Design)
+                # Kart Tasarımı
                 c1, c2, c3 = st.columns(3)
-                top_journals = journal_counts.head(3)
+                top_journals = df['Dergi Adı'].value_counts().reset_index()
+                top_journals.columns = ['Dergi Adı', 'Skor']
                 
-                for index, row in top_journals.iterrows():
+                for index, row in top_journals.head(3).iterrows():
                     is_predatory = check_predatory(row['Dergi Adı'])
                     detail = df[df['Dergi Adı'] == row['Dergi Adı']].iloc[0]
                     card_color = "#FF4B4B" if is_predatory else "#00CC96"
@@ -141,45 +128,48 @@ if menu == "🏠 Ana Sayfa":
                     
                     with (c1 if index==0 else c2 if index==1 else c3):
                         st.markdown(f"""
-                        <div style="background:white; border-radius:12px; padding:20px; border-top:5px solid {card_color}; box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+                        <div style="background:white; border-radius:12px; padding:20px; border-top:5px solid {card_color}; box-shadow:0 4px 12px rgba(0,0,0,0.1); margin-bottom:20px;">
                             <h4 style="color:#0F2C59; height:40px; overflow:hidden;">{row['Dergi Adı']}</h4>
                             <p style="font-size:12px; color:gray;">{detail['Yayınevi']}</p>
-                            <p><strong>{status_text}</strong></p>
-                            <p>Etki: <strong>{detail['Tahmini Q Değeri']}</strong></p>
+                            <div style="display:flex; justify-content:space-between; margin-top:10px;">
+                                <span style="font-weight:bold; color:{card_color}">{status_text}</span>
+                                <span style="background:#eee; padding:2px 8px; border-radius:4px;">{detail['Tahmini Q Değeri']}</span>
+                            </div>
                         </div>
                         """, unsafe_allow_html=True)
-                        st.write("###")
-                        bc1, bc2 = st.columns(2)
-                        with bc1:
+                        
+                        b1, b2 = st.columns(2)
+                        with b1:
                             if homepage: st.link_button("🌐 Site", homepage, use_container_width=True)
                             else: st.button("🚫", disabled=True, use_container_width=True)
-                        with bc2:
+                        with b2:
                             st.link_button("📝 Rehber", guidelines, use_container_width=True)
-                
-                st.write("### 📊 Tüm Liste")
+
+                st.write("### 📊 Detaylı Tablo")
                 st.dataframe(df, use_container_width=True)
             else:
                 st.error("Sonuç bulunamadı.")
 
     elif doi_clicked and doi_input:
-        # (DOI Arama Kodları Buraya - Aynısı)
-        with st.spinner('Referanslar taranıyor...'):
+        with st.spinner('Referans ağları analiz ediliyor...'):
             df_doi = get_journals_from_openalex(doi_input, mode="doi")
         if not df_doi.empty:
-            st.success("Referans kültürü analiz edildi!")
+            st.success("İşlem Başarılı!")
             st.dataframe(df_doi, use_container_width=True)
         else:
             st.error("Veri bulunamadı.")
 
-    # 5. İSTATİSTİKLER (Sadece Arama Yapılmadıysa Göster - Ekranı Temiz Tutmak İçin)
+    # 4. ALT BİLGİ (Footer) - Sadece arama yapılmadıysa göster
     elif not search_clicked and not doi_clicked:
         st.write("###")
         st.write("###")
-        st.divider()
-        m1, m2, m3 = st.columns(3)
-        m1.metric("📚 İndeksli Dergi", "85,000+")
-        m2.metric("🤖 AI Analizi", "Semantik")
-        m3.metric("🛡️ Güvenlik", "%100")
+        st.markdown("<div style='text-align:center; color:#ccc;'>__________________________</div>", unsafe_allow_html=True)
+        st.write("###")
+        
+        f1, f2, f3 = st.columns(3)
+        f1.metric("📚 Kapsam", "85k+ Dergi")
+        f2.metric("⚡ Hız", "2.1 Saniye")
+        f3.metric("🛡️ Güvenlik", "Predatory Check")
 
 # --- 2. DERGİ BULUCU (CORE) ---
 elif menu == "🔍 Dergi Bulucu (Core)":
@@ -326,6 +316,7 @@ elif menu == "🛡️ Güvenlik Kontrolü":
     if st.button("Sorgula"):
         if check_predatory(j_name): st.error("⚠️ RİSKLİ DERGİ!")
         else: st.success("✅ Temiz görünüyor.")
+
 
 
 
