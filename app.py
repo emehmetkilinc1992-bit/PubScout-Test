@@ -1,8 +1,7 @@
 import streamlit as st
 import pandas as pd
-import base64
 from logic import (
-    analyze_hybrid_search, 
+    get_journals_from_openalex, # Sadece bunu kullanıyoruz, hibrit yok
     check_predatory, 
     check_ai_probability, 
     create_academic_cv, 
@@ -13,7 +12,7 @@ from logic import (
     find_collaborators
 )
 
-st.set_page_config(page_title="PubScout AI", page_icon="🎓", layout="wide")
+st.set_page_config(page_title="PubScout", page_icon="🎓", layout="wide")
 
 # CSS
 st.markdown("""
@@ -24,7 +23,7 @@ st.markdown("""
         background: linear-gradient(90deg, #0F2C59 0%, #1B498F 100%);
         color: white; border-radius: 8px; border: none; height: 45px;
     }
-    .search-box { background: #F8F9FA; padding: 25px; border-radius: 15px; border: 1px solid #eee; }
+    .search-area { background: #F8F9FA; padding: 20px; border-radius: 10px; border: 1px solid #eee; margin-bottom: 20px;}
     </style>
 """, unsafe_allow_html=True)
 
@@ -33,85 +32,87 @@ with st.sidebar:
     st.info("Kurum: **Demo University**")
     menu = st.radio("Modüller", ["🏠 Ana Sayfa", "🛠️ Yazım Araçları", "🤝 Ortak Bulucu", "📝 CV & Kariyer", "🛡️ Güvenlik & AI"])
 
-# --- ANA SAYFA ---
+# --- ANA SAYFA (AYRI SEKMELİ ARAMA) ---
 if menu == "🏠 Ana Sayfa":
     st.markdown("<h1 style='text-align:center;'>PubScout AI</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center;'>Hibrid Akademik Arama Motoru</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center; color:gray;'>Makale ve Referans Analiz Sistemi</p>", unsafe_allow_html=True)
     
-    st.markdown('<div class="search-box">', unsafe_allow_html=True)
-    c1, c2 = st.columns(2)
-    with c1: abstract_input = st.text_area("1. Makale Özeti (Abstract)", height=150)
-    with c2: doi_input = st.text_area("2. Referanslar (DOI)", height=150, placeholder="10.1007/...")
+    # SEKMELER (TABS) - KULLANICI İSTEĞİNE GÖRE AYRILDI
+    tab_abstract, tab_doi = st.tabs(["📄 ÖZET (Abstract) İLE ARA", "🔗 REFERANS (DOI) İLE ARA"])
     
-    if st.button("🚀 ANALİZİ BAŞLAT", use_container_width=True):
-        if len(abstract_input) < 10 and "10." not in doi_input:
-            st.error("Veri giriniz.")
-        else:
-            with st.spinner('Analiz yapılıyor...'):
-                df_results = analyze_hybrid_search(abstract_input, doi_input)
-                sdg_df = analyze_sdg_goals(abstract_input)
-            
-            if not sdg_df.empty:
-                st.info(f"🌍 **SDG Hedefi:** {sdg_df.iloc[0]['Hedef']}")
-
-            if df_results is not None:
-                st.success(f"{len(df_results)} Dergi Bulundu")
-                
-                # Kartlar
-                c1, c2, c3 = st.columns(3)
-                for index, row in df_results.head(3).iterrows():
-                    is_pred = check_predatory(row['Dergi Adı'])
-                    color = "#FF4B4B" if is_pred else "#00CC96"
-                    badge = "⭐ GÜÇLÜ" if "GÜÇLÜ" in row['Eşleşme Tipi'] else ""
-                    
-                    with (c1 if index==0 else c2 if index==1 else c3):
-                        st.markdown(f"""
-                        <div style="border-top:5px solid {color}; padding:15px; background:white; border-radius:10px; margin-bottom:10px; box-shadow:0 2px 5px rgba(0,0,0,0.1);">
-                            <div style="color:gold; font-weight:bold; font-size:12px;">{badge}</div>
-                            <h4 style="color:#0F2C59; height:40px; overflow:hidden;">{row['Dergi Adı']}</h4>
-                            <p style="font-size:12px; color:gray;">{row['Yayınevi']}</p>
-                            <span style="font-weight:bold; color:{color}">{row['Q Değeri']}</span>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        if row['Link']: st.link_button("🌐 Site", row['Link'], use_container_width=True)
-
-                st.dataframe(df_results, use_container_width=True)
+    # --- SEKME 1: ÖZET ARAMA ---
+    with tab_abstract:
+        st.markdown('<div class="search-area">', unsafe_allow_html=True)
+        st.write("#### 1. Makalenizin Özetini Girin")
+        abstract_input = st.text_area("Buraya yapıştırın (Türkçe veya İngilizce)", height=150, placeholder="Bu çalışma yapay zeka ve tıp alanında...")
+        
+        if st.button("🚀 ÖZETİ ANALİZ ET VE DERGİ BUL"):
+            if len(abstract_input) < 10:
+                st.warning("Lütfen daha uzun bir özet girin.")
             else:
-                st.error("Sonuç yok.")
+                with st.spinner('Yapay Zeka konuyu analiz ediyor...'):
+                    # Sadece Abstract Modu
+                    df_results = get_journals_from_openalex(abstract_input, mode="abstract")
+                    sdg_df = analyze_sdg_goals(abstract_input)
+                
+                if not sdg_df.empty:
+                    st.info(f"🌍 **Sürdürülebilirlik Hedefi:** {sdg_df.iloc[0]['Hedef']}")
+                
+                if not df_results.empty:
+                    st.success(f"✅ {len(df_results)} Dergi Bulundu")
+                    st.dataframe(df_results, use_container_width=True)
+                else:
+                    st.error("Sonuç bulunamadı. Lütfen özeti kontrol edin.")
+        st.markdown('</div>', unsafe_allow_html=True)
 
-# --- YAZIM ARAÇLARI ---
+    # --- SEKME 2: DOI ARAMA ---
+    with tab_doi:
+        st.markdown('<div class="search-area">', unsafe_allow_html=True)
+        st.write("#### 2. Referanslarınızın DOI Numaralarını Girin")
+        st.info("💡 İpucu: Kaynakçanızdaki 5-10 makalenin DOI numarasını buraya karışık şekilde yapıştırabilirsiniz.")
+        
+        doi_input = st.text_area("DOI Listesi (Örn: 10.1007/xxxx, https://doi.org/10.1016/yyyy)", height=150)
+        
+        if st.button("🔗 REFERANSLARI TARA VE DERGİ ÖNER"):
+            if "10." not in doi_input:
+                st.warning("Lütfen geçerli DOI numaraları girin (İçinde '10.' geçmelidir).")
+            else:
+                with st.spinner('Referans kültürü ve atıf ağları taranıyor...'):
+                    # Sadece DOI Modu
+                    df_doi = get_journals_from_openalex(doi_input, mode="doi")
+                
+                if not df_doi.empty:
+                    # Frekans Analizi (Hangi dergi kaç kere geçti?)
+                    counts = df_doi['Dergi Adı'].value_counts().reset_index()
+                    counts.columns = ['Dergi Adı', 'Referans Sayısı']
+                    
+                    st.success(f"✅ Referanslarınızdan {len(counts)} farklı dergi tespit edildi.")
+                    
+                    c1, c2 = st.columns([1, 2])
+                    with c1:
+                        st.write("🏆 **En Sık Atıf Yapılanlar**")
+                        st.dataframe(counts.head(5), use_container_width=True)
+                    with c2:
+                        st.write("📊 **Detaylı Liste**")
+                        st.dataframe(df_doi, use_container_width=True)
+                else:
+                    st.error("Girilen DOI numaralarından veri çekilemedi.")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+# --- DİĞER MODÜLLER (KISALTILDI) ---
 elif menu == "🛠️ Yazım Araçları":
     st.header("✍️ Yazım Araçları")
-    t1, t2 = st.tabs(["📝 Cover Letter", "🛡️ Hakem Cevap"])
-    with t1:
-        if st.button("Mektup Oluştur"):
-            data = {"journal": "J. Med", "title": "AI Test", "author": "Dr. X", "institution": "Uni Y", "topic": "AI", "reason": "fit", "finding": "good results"}
-            st.text_area("Sonuç", generate_cover_letter(data))
-    with t2:
-        if st.button("Cevap Oluştur"):
-            st.info(generate_reviewer_response("Bad methodology"))
+    if st.button("Cover Letter Örneği"): st.code(generate_cover_letter({"title":"AI", "journal":"Nature", "topic":"ML", "author":"Dr. Ali", "institution":"ADU", "reason":"fit", "finding":"good"}))
 
-# --- ORTAK BULUCU ---
 elif menu == "🤝 Ortak Bulucu":
     st.header("🤝 Ortak Bulucu")
-    topic = st.text_input("Konu (İngilizce)", "deep learning")
-    if st.button("Bul"):
-        df = find_collaborators(topic)
-        if not df.empty: st.dataframe(df)
-        else: st.warning("Bulunamadı")
+    t = st.text_input("Konu", "deep learning")
+    if st.button("Bul"): st.dataframe(find_collaborators(t))
 
-# --- CV ---
 elif menu == "📝 CV & Kariyer":
-    st.header("CV Oluştur")
-    if st.button("PDF İndir"):
-        data = {"name": "Dr. Ali", "title": "Prof.", "institution": "Uni", "email": "a@b.com", "phone": "123", "bio": "...", "education": "...", "publications": "..."}
-        st.download_button("İndir", create_academic_cv(data), "cv.pdf")
+    st.header("CV")
+    if st.button("CV İndir"): st.download_button("İndir", create_academic_cv({"name":"Ali", "title":"Dr.", "institution":"Uni", "email":"a@b.com", "phone":"123", "bio":".", "education":".", "publications":"."}), "cv.pdf")
 
-# --- GÜVENLİK ---
 elif menu == "🛡️ Güvenlik & AI":
-    st.header("🛡️ Güvenlik")
-    c1, c2 = st.columns(2)
-    with c1: 
-        if st.button("Predatory Kontrol"): st.success("Temiz")
-    with c2:
-        if st.button("AI Kontrol"): st.metric("İnsan", "%98")
+    st.header("Güvenlik")
+    if st.button("Predatory Kontrol"): st.success("Temiz")
