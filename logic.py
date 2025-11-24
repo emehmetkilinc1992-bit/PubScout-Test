@@ -14,17 +14,27 @@ def get_journals_from_openalex(text_input, mode="abstract"):
     # MOD A: ABSTRACT
     if mode == "abstract" and text_input and len(text_input) > 10:
         try:
+            # Çeviri işlemi
             translated = GoogleTranslator(source='auto', target='en').translate(text_input)
-            if not translated: translated = text_input
+            if not translated:
+                translated = text_input
         except:
             translated = text_input
             
         keywords = " ".join(translated.split()[:30])
-        params = {"search": keywords, "per-page": 50, "filter": "type:article", "select": "primary_location,title,cited_by_count"}
+        params = {
+            "search": keywords,
+            "per-page": 50,
+            "filter": "type:article",
+            "select": "primary_location,title,cited_by_count"
+        }
         
         try:
             resp = requests.get(base_url, params=params)
-            results = resp.json().get('results', [])
+            if resp.status_code == 200:
+                results = resp.json().get('results', [])
+            else:
+                results = []
         except:
             results = []
 
@@ -36,8 +46,10 @@ def get_journals_from_openalex(text_input, mode="abstract"):
             try:
                 clean = "https://doi.org/" + doi
                 res = requests.get(f"https://api.openalex.org/works/{clean}")
-                if res.status_code == 200: results.append(res.json())
-            except: pass
+                if res.status_code == 200:
+                    results.append(res.json())
+            except:
+                pass
     else:
         return pd.DataFrame()
 
@@ -50,7 +62,11 @@ def get_journals_from_openalex(text_input, mode="abstract"):
             pub = source.get('host_organization_name')
             link = source.get('homepage_url')
             imp = work.get('cited_by_count', 0)
-            q_val = "Q1" if imp > 50 else "Q2" if imp > 20 else "Q3" if imp > 5 else "Q4"
+            
+            if imp > 50: q_val = "Q1"
+            elif imp > 20: q_val = "Q2"
+            elif imp > 5: q_val = "Q3"
+            else: q_val = "Q4"
 
             if name:
                 journal_list.append({
@@ -77,17 +93,22 @@ def analyze_hybrid_search(abstract_text, doi_text):
 
     full_df = pd.concat([df_abs, df_doi])
     
-    if full_df.empty: return None
+    if full_df.empty:
+        return None
 
     # Puanlama
     grouped = full_df.groupby(['Dergi Adı', 'Yayınevi', 'Q Değeri', 'Link']).size().reset_index(name='Skor')
     
     def get_source_tag(row):
         sources = full_df[full_df['Dergi Adı'] == row['Dergi Adı']]['Kaynak'].unique()
-        return "🔥 GÜÇLÜ EŞLEŞME" if len(sources) > 1 else f"Kaynak: {sources[0]}"
+        if len(sources) > 1:
+            return "🔥 GÜÇLÜ EŞLEŞME"
+        else:
+            return f"Kaynak: {sources[0]}"
 
     grouped['Eşleşme Tipi'] = grouped.apply(get_source_tag, axis=1)
-    grouped = grouped.sort_values(by=['Skor', 'Q Değeri'], ascending=[False, True]) # Önce Skor, Sonra Q1
+    # Sıralama
+    grouped = grouped.sort_values(by=['Skor', 'Q Değeri'], ascending=[False, True])
     
     return grouped
 
@@ -101,16 +122,58 @@ def load_ai_detector():
     return pipeline("text-classification", model="roberta-base-openai-detector")
 
 def check_ai_probability(text):
-    if not text or len(text) < 50: return None
+    if not text or len(text) < 50:
+        return None
     try:
         clf = load_ai_detector()
         res = clf(text[:512])[0]
-        lbl = "Yapay Zeka (AI)" if res['label']=='Fake' else "İnsan (Doğal)"
-        clr = "#FF4B4B" if res['label']=='Fake' else "#00CC96"
+        
+        if res['label'] == 'Fake':
+            lbl = "Yapay Zeka (AI)"
+            clr = "#FF4B4B"
+        else:
+            lbl = "İnsan (Doğal)"
+            clr = "#00CC96"
+            
         return {"label": lbl, "score": res['score'], "color": clr}
-    except: return None
+    except:
+        return None
 
 def convert_reference_style(ref_text, target_format):
     if not ref_text: return ""
-    if target_format == "APA 7": return f"[APA] {ref_text} (Otomatik Düzenlendi)"
-    elif target_format == "IEEE": return f"[1] {ref_text
+    if target_format == "APA 7":
+        return f"[APA] {ref_text} (Otomatik Düzenlendi)"
+    elif target_format == "IEEE":
+        return f"[1] {ref_text}."
+    return ref_text
+
+def create_academic_cv(data):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", size=12)
+    
+    def clean(t):
+        return str(t).encode('latin-1', 'replace').decode('latin-1')
+    
+    pdf.set_font("Helvetica", 'B', 20)
+    pdf.cell(0, 15, txt=clean(data['name']), ln=True, align='C')
+    pdf.set_font("Helvetica", 'I', 14)
+    pdf.cell(0, 10, txt=clean(data['title']), ln=True, align='C')
+    pdf.ln(5)
+    
+    pdf.set_font("Helvetica", size=10)
+    pdf.cell(0, 5, txt=clean(f"{data['email']} | {data['phone']} | {data['institution']}"), ln=True, align='C')
+    pdf.ln(10)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(10)
+    
+    sections = [("SUMMARY", 'bio'), ("EDUCATION", 'education'), ("PUBLICATIONS", 'publications')]
+    
+    for title, key in sections:
+        pdf.set_font("Helvetica", 'B', 14)
+        pdf.cell(0, 10, txt=title, ln=True)
+        pdf.set_font("Helvetica", size=11)
+        pdf.multi_cell(0, 5, txt=clean(data[key]))
+        pdf.ln(5)
+
+    return pdf.output(dest='S').encode('latin-1')
