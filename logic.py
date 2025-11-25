@@ -9,75 +9,71 @@ from transformers import pipeline
 
 # --- API AYARLARI ---
 BASE_URL = "https://api.openalex.org"
-# Lütfen kendi mail adresini yaz (OpenAlex "polite pool" için gereklidir)
 HEADERS = {'User-Agent': 'mailto:admin@pubscout.com'}
 
-# --- YARDIMCI: GELİŞMİŞ KELİME AYIKLAYICI (CAR-T VE BİYOLOJİ DOSTU) ---
+# --- YARDIMCI: GELİŞMİŞ KELİME AYIKLAYICI (TERM KORUMALI) ---
 def extract_keywords(text):
-    # 1. Metni küçük harfe çevir
-    text = str(text).lower()
-    
-    # 2. Yasaklı Kelimeler (Stop Words) - Genişletilmiş Liste
-    # Bu kelimeler akademik metinlerde çok geçer ama ayırt edici değildir.
+    # 1. Yasaklı Kelimeler (Genişletilmiş)
     stop_words = [
         "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by", 
         "is", "are", "was", "were", "be", "been", "this", "that", "these", "those", 
         "study", "research", "paper", "article", "thesis", "analysis", "investigation",
         "method", "result", "results", "conclusion", "abstract", "introduction", "aim", "scope",
         "discuss", "review", "current", "future", "possibilities", "treatment", "design",
-        "carried", "out", "based", "briefly", "describes", "looks", "forward", "concluded",
-        "lies", "overcome", "recruiting", "endogenous", "response", "final", "task", "field",
-        "carry", "secure", "funding", "needed", "complete", "continues", "progress", "records",
-        "successful", "occur", "encouragement", "increasingly", "important", "recent", "years",
-        "preparation", "individual", "innovation", "functional", "requires", "long", "journey",
-        "development", "resulted", "improvements", "safety", "effectiveness", "rapidly", "great",
-        "strong", "application", "potential", "according", "large", "number", "global", "clinical", "trials",
-        "background", "objective", "methods", "conclusions"
+        "background", "objective", "methods", "conclusions", "significant", "showed", "using",
+        "based", "potential", "high", "new", "development", "application"
     ]
     
-    # 3. Özel Terimleri Koru (CAR-T gibi tireli kelimeler parçalanmasın diye _ yapıyoruz)
-    text = text.replace("car-t", "car_t")
-    text = text.replace("covid-19", "covid_19")
+    # 2. Önce orijinal metindeki BÜYÜK HARFLİ KISALTMALARI (Acronyms) yakala
+    # Örn: CAR-T, DNA, RNA, T-Cell (Tireli olanları da alır)
+    important_terms = re.findall(r'\b[A-Z][a-zA-Z0-9\-]+\b', text)
     
-    # 4. Sadece harfleri ve alt çizgiyi al (noktalama temizliği)
-    text = re.sub(r'[^a-z_\s]', '', text)
+    # 3. Metni temizle (Ama tireyi ve rakamları silme!)
+    text_clean = re.sub(r'[^a-zA-Z0-9\-\s]', '', str(text).lower())
+    words = text_clean.split()
     
-    words = text.split()
-    
-    # 5. Anlamlı Kelimeleri Seç
+    # 4. Kelimeleri filtrele
     meaningful_words = []
+    
+    # Önce önemli terimleri ekle (CAR-T gibi)
+    for term in important_terms:
+        if len(term) > 1 and term.lower() not in stop_words:
+            meaningful_words.append(term) 
+
+    # Sonra diğer kelimeleri ekle
     for w in words:
-        if w not in stop_words and len(w) > 2: # 2 harften uzun olsun
-            # car_t'yi tekrar car-t yap
-            if w == "car_t": w = "car-t"
-            if w == "covid_19": w = "covid-19"
+        if w not in stop_words and len(w) > 3:
             meaningful_words.append(w)
     
-    # 6. Tekrarları kaldır ve ilk 6 kelimeyi al
-    unique_words = list(dict.fromkeys(meaningful_words))
-    return " ".join(unique_words[:6])
+    # 5. Tekrarları kaldır (Sırayı koruyarak)
+    seen = set()
+    unique_words = [x for x in meaningful_words if not (x.lower() in seen or seen.add(x.lower()))]
+    
+    # İlk 6-8 kelimeyi döndür
+    return " ".join(unique_words[:8])
 
 # --- 1. REFERANS BULUCU (LITERATURE SEARCH) 📚 ---
 def find_relevant_references(text_input):
     try:
-        # 1. Çeviri
+        # Çeviri Kontrolü (Türkçe ise çevir)
         try:
-            translated = GoogleTranslator(source='auto', target='en').translate(text_input)
-            if not translated: translated = text_input
+            if " ve " in text_input or " bir " in text_input:
+                translated = GoogleTranslator(source='auto', target='en').translate(text_input)
+            else: translated = text_input
         except: translated = text_input
         
-        # 2. Akıllı Kelime Ayıklama
+        # Akıllı Kelime Ayıklama
         keywords = extract_keywords(translated)
         
-        # Eğer kelime kalmazsa orijinalden parça al (Fallback)
-        if len(keywords) < 3: keywords = translated.split()[:5]
-        if isinstance(keywords, list): keywords = " ".join(keywords)
+        # Fallback (Kelime kalmadıysa metinden parça al)
+        if len(keywords) < 3: 
+            keywords = " ".join(translated.split()[:5])
 
-        # 3. Arama
+        # Arama (Relevance Score önemli!)
         params = {
             "search": keywords,
             "per-page": 15,
-            "sort": "cited_by_count:desc", # En popüler makaleler
+            "sort": "relevance_score:desc", # Konuya en uygun olanı getir
             "filter": "type:article",
             "select": "title,publication_year,cited_by_count,authorships,doi,id"
         }
@@ -123,7 +119,7 @@ def analyze_university_stats(uni_name):
         }
 
         stats_data = []
-        for page in range(1, 6): # 1000 Makale Örneklemi
+        for page in range(1, 6): # 1000 Makale
             params['page'] = page
             r = requests.get(f"{BASE_URL}/works", params=params, headers=HEADERS)
             data = r.json().get('results', [])
@@ -162,15 +158,15 @@ def get_journals_from_openalex(text_input, mode="abstract"):
             if not translated: translated = text_input
         except: translated = text_input
         
-        # Burada da yeni kelime ayıklayıcıyı kullanıyoruz
         keywords = extract_keywords(translated)
         if len(keywords)<3: keywords = translated
 
         try:
-            r = requests.get(f"{BASE_URL}/works", params={"search":keywords,"per-page":50,"filter":"type:article","select":"primary_location,title,cited_by_count"}, headers=HEADERS)
+            # Dergi bulurken de Relevance Score kullanıyoruz
+            r = requests.get(f"{BASE_URL}/works", params={"search":keywords,"per-page":50,"filter":"type:article","select":"primary_location,title,cited_by_count","sort":"relevance_score:desc"}, headers=HEADERS)
             results = r.json().get('results', [])
             if not results:
-                # Fallback: Tek kelime
+                # Fallback
                 first_word = keywords.split()[0] if keywords else "science"
                 r = requests.get(f"{BASE_URL}/works", params={"search":first_word,"per-page":50}, headers=HEADERS)
                 results = r.json().get('results', [])
@@ -237,13 +233,7 @@ def analyze_concepts(topic):
 # --- 5. DİĞER ARAÇLAR ---
 def analyze_sdg_goals(text):
     if not text: return pd.DataFrame()
-    # Genişletilmiş SDG Anahtarları
-    keys = {
-        "SDG 3 (Sağlık)": ["health", "cancer", "disease", "medicine", "clinical", "car-t", "cell", "therapy"],
-        "SDG 4 (Eğitim)": ["education", "school", "learning", "student"],
-        "SDG 9 (AI/Tech)": ["ai", "data", "technology", "innovation"],
-        "SDG 13 (İklim)": ["climate", "environment", "carbon", "warming"]
-    }
+    keys = {"SDG 3 (Sağlık)":["health","cancer","car-t"], "SDG 4 (Eğitim)":["education"], "SDG 9 (AI/Tech)":["ai","data"], "SDG 13 (İklim)":["climate"]}
     m = [{"Hedef":k, "Skor":sum(1 for x in v if x in str(text).lower())} for k,v in keys.items()]
     return pd.DataFrame(m).sort_values("Skor", ascending=False)[pd.DataFrame(m)['Skor']>0]
 
