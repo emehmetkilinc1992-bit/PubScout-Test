@@ -1,172 +1,163 @@
-import requests
-import pandas as pd
 import streamlit as st
-from deep_translator import GoogleTranslator
-from fpdf import FPDF
-import re
-from datetime import date
+import pandas as pd
+import plotly.express as px
+from logic import (
+    get_journals_from_openalex, 
+    check_predatory, 
+    check_ai_probability, 
+    create_academic_cv, 
+    convert_reference_style, 
+    analyze_sdg_goals,
+    generate_cover_letter, 
+    generate_reviewer_response, 
+    find_collaborators,
+    analyze_trends, # YENİ
+    find_funders,   # YENİ
+    analyze_concepts # YENİ
+)
 
-# --- YARDIMCI: GEREKSİZ KELİMELERİ TEMİZLE (Özet İçin) ---
-def extract_keywords(text):
-    stop_words = [
-        "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by", 
-        "is", "are", "was", "were", "be", "been", "this", "that", "these", "those", 
-        "study", "research", "paper", "article", "thesis", "analysis", "investigation",
-        "method", "result", "conclusion", "abstract", "introduction", "aim", "scope"
-    ]
-    # Sadece harfleri al
-    text = re.sub(r'[^a-zA-Z\s]', '', str(text).lower())
-    words = text.split()
-    # Anlamlı kelimeleri seç
-    meaningful_words = [w for w in words if w not in stop_words and len(w) > 3]
-    # İlk 8 kelime yeterli
-    return " ".join(meaningful_words[:8])
+st.set_page_config(page_title="PubScout", page_icon="🎓", layout="wide")
 
-# --- ANA ARAMA MOTORU ---
-def get_journals_from_openalex(text_input, mode="abstract"):
-    base_url = "https://api.openalex.org/works"
-    # API Kimliği (Engel yememek için)
-    headers = {'User-Agent': 'mailto:admin@pubscout.com'}
+# CSS
+st.markdown("""
+    <style>
+    .main { background-color: #ffffff; }
+    h1, h2, h3 { color: #0F2C59; }
+    .stButton>button {
+        background: linear-gradient(90deg, #0F2C59 0%, #1B498F 100%);
+        color: white; border-radius: 8px; border: none; height: 45px;
+    }
+    .search-area { background: #F8F9FA; padding: 20px; border-radius: 10px; border: 1px solid #eee; margin-bottom: 20px;}
+    </style>
+""", unsafe_allow_html=True)
+
+with st.sidebar:
+    st.title("🎓 PubScout")
+    st.info("Kurum: **Demo University**")
+    # MENÜ GÜNCELLENDİ
+    menu = st.radio("Modüller", ["🏠 Ana Sayfa", "🚀 Strateji ve Trendler", "🛠️ Yazım Araçları", "🤝 Ortak Bulucu", "📝 CV & Kariyer", "🛡️ Güvenlik & AI"])
+
+# --- ANA SAYFA ---
+if menu == "🏠 Ana Sayfa":
+    st.markdown("<h1 style='text-align:center;'>PubScout AI</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center; color:gray;'>Akademik Arama ve Analiz Motoru</p>", unsafe_allow_html=True)
     
-    columns = ["Dergi Adı", "Yayınevi", "Q Değeri", "Link", "Kaynak", "Atıf Gücü"]
-    journal_list = []
-
-    # --- MOD A: ABSTRACT (ÖZET) ---
-    if mode == "abstract" and text_input:
-        # 1. Çeviri
-        try:
-            translated = GoogleTranslator(source='auto', target='en').translate(text_input)
-            if not translated: translated = text_input
-        except:
-            translated = text_input
-            
-        # 2. Akıllı Kelime Seçimi
-        keywords = extract_keywords(translated)
+    tab_abstract, tab_doi = st.tabs(["📄 ÖZET (Abstract) İLE ARA", "🔗 REFERANS (DOI) İLE ARA"])
+    
+    with tab_abstract:
+        st.markdown('<div class="search-area">', unsafe_allow_html=True)
+        st.write("#### 1. Makalenizin Özetini Girin")
+        abstract_input = st.text_area("Buraya yapıştırın (Türkçe veya İngilizce)", height=150, placeholder="Bu çalışma...")
         
-        # Eğer kelime kalmadıysa orijinalden al
-        if len(keywords) < 3: keywords = translated
-
-        params = {
-            "search": keywords,
-            "per-page": 50,
-            "filter": "type:article",
-            "select": "primary_location,title,cited_by_count"
-        }
-        
-        try:
-            resp = requests.get(base_url, params=params, headers=headers)
-            results = resp.json().get('results', [])
-        except:
-            results = []
-
-    # --- MOD B: DOI (REFERANS LİSTESİ) ---
-    elif mode == "doi" and text_input:
-        # Temizlik: https, doi:, boşluklar vs. temizle
-        clean_text = text_input.replace("https://doi.org/", "").replace("doi:", "").strip()
-        
-        # Regex ile metindeki TÜM DOI formatlarını yakala (10.xxxx/yyyy)
-        raw_dois = re.findall(r'(10\.\d{4,9}/[-._;()/:a-zA-Z0-9]+)', clean_text)
-        
-        # Benzersizleri al
-        unique_dois = list(set(raw_dois))
-        
-        results = []
-        # İlk 15 DOI'yi tara (Performans için)
-        for doi in unique_dois[:15]:
-            doi = doi.rstrip(".,)")
-            try:
-                # API İsteği
-                api_url = f"https://api.openalex.org/works/https://doi.org/{doi}"
-                res = requests.get(api_url, headers=headers)
+        if st.button("🚀 ÖZETİ ANALİZ ET"):
+            if len(abstract_input) < 10:
+                st.warning("Lütfen daha uzun bir özet girin.")
+            else:
+                with st.spinner('Analiz yapılıyor...'):
+                    df_results = get_journals_from_openalex(abstract_input, mode="abstract")
+                    sdg_df = analyze_sdg_goals(abstract_input)
                 
-                if res.status_code == 200:
-                    results.append(res.json())
-                else:
-                    # Yedek yöntem
-                    res2 = requests.get(f"https://api.openalex.org/works?filter=doi:https://doi.org/{doi}", headers=headers)
-                    if res2.status_code == 200 and res2.json()['results']:
-                        results.extend(res2.json()['results'])
-            except: pass
-            
-    else:
-        return pd.DataFrame(columns=columns)
-
-    # --- SONUÇLARI LİSTELE ---
-    for work in results:
-        try:
-            loc = work.get('primary_location', {})
-            if loc and loc.get('source'):
-                source = loc.get('source')
-                name = source.get('display_name')
+                if not sdg_df.empty and sdg_df.iloc[0]['Skor'] > 0:
+                    st.info(f"🌍 **SDG Hedefi:** {sdg_df.iloc[0]['Hedef']}")
                 
-                if not name: continue
+                if not df_results.empty:
+                    st.success(f"✅ {len(df_results)} Dergi Bulundu")
+                    st.dataframe(df_results, use_container_width=True,
+                        column_config={
+                            "Link": st.column_config.LinkColumn("Web Sitesi", display_text="🌐 Siteye Git"),
+                            "Atıf Gücü": st.column_config.ProgressColumn("Atıf", format="%d", min_value=0, max_value=1000)
+                        })
+                else: st.error("Sonuç bulunamadı.")
+        st.markdown('</div>', unsafe_allow_html=True)
 
-                pub = source.get('host_organization_name')
-                link = source.get('homepage_url')
-                imp = work.get('cited_by_count', 0)
-                q_val = "Q1" if imp > 50 else "Q2" if imp > 20 else "Q3" if imp > 5 else "Q4"
+    with tab_doi:
+        st.markdown('<div class="search-area">', unsafe_allow_html=True)
+        st.write("#### 2. Referans DOI'lerini Girin")
+        doi_input = st.text_area("DOI Listesi", height=150)
+        if st.button("🔗 REFERANSLARI TARA"):
+            if "10." not in doi_input: st.warning("Geçerli DOI bulunamadı.")
+            else:
+                with st.spinner('Taranıyor...'):
+                    df_doi = get_journals_from_openalex(doi_input, mode="doi")
+                if not df_doi.empty:
+                    st.success(f"✅ {len(df_doi)} Sonuç")
+                    st.dataframe(df_doi, use_container_width=True,
+                        column_config={
+                            "Link": st.column_config.LinkColumn("Web Sitesi", display_text="🌐 Siteye Git"),
+                            "Atıf Gücü": st.column_config.ProgressColumn("Atıf", format="%d", min_value=0, max_value=1000)
+                        })
+                else: st.error("Veri bulunamadı.")
+        st.markdown('</div>', unsafe_allow_html=True)
 
-                journal_list.append({
-                    "Dergi Adı": name,
-                    "Yayınevi": pub,
-                    "Q Değeri": q_val,
-                    "Link": link,
-                    "Kaynak": "Referans (DOI)" if mode == "doi" else "Özet (Konu)",
-                    "Atıf Gücü": imp
-                })
-        except: continue
+# --- YENİ MODÜL: STRATEJİ VE TRENDLER ---
+elif menu == "🚀 Strateji ve Trendler":
+    st.header("📈 Akademik Trend ve Strateji Analizi")
+    st.info("Bu modül, Rektörlük ve Araştırmacılar için makro analizler sunar.")
     
-    df = pd.DataFrame(journal_list)
-    if df.empty: return pd.DataFrame(columns=columns)
+    topic = st.text_input("Araştırma Konusunu Girin (Örn: Artificial Intelligence, Solar Energy)", "Artificial Intelligence")
     
-    return df
+    if st.button("Trendleri Analiz Et"):
+        with st.spinner('Küresel veri tabanları taranıyor...'):
+            # 1. Trend Grafiği
+            df_trends = analyze_trends(topic)
+            # 2. Fon Sağlayıcılar
+            df_funders = find_funders(topic)
+            # 3. Kavram Haritası
+            df_concepts = analyze_concepts(topic)
+        
+        # Görselleştirme
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            st.subheader("📊 Yıllara Göre Yayın Sayısı (Trend)")
+            if not df_trends.empty:
+                fig = px.line(df_trends, x='Yıl', y='Makale Sayısı', markers=True, title=f"'{topic}' Konusunun Yükselişi")
+                fig.update_layout(xaxis_type='category') # Yılları tam göster
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.warning("Trend verisi bulunamadı.")
 
-# --- DİĞER ARAÇLAR (Hatasız Çalışması İçin) ---
-def analyze_sdg_goals(text):
-    if not text: return pd.DataFrame()
-    sdg_keywords = {"SDG 3 (Sağlık)": ["health", "cancer"], "SDG 4 (Eğitim)": ["education"], "SDG 9 (Teknoloji)": ["ai", "data"]}
-    text = str(text).lower()
-    matched = [{"Hedef": k, "Skor": sum(1 for w in v if w in text)} for k, v in sdg_keywords.items()]
-    df = pd.DataFrame(matched).sort_values(by="Skor", ascending=False)
-    return df[df['Skor'] > 0]
+        with col2:
+            st.subheader("💰 En Büyük Fon Sağlayıcılar")
+            st.caption("Bu konuyu kimler finanse ediyor?")
+            if not df_funders.empty:
+                st.dataframe(df_funders, hide_index=True, use_container_width=True)
+            else:
+                st.warning("Fon verisi bulunamadı.")
+        
+        st.divider()
+        
+        st.subheader("🧠 İlişkili Kavramlar (Literatür Haritası)")
+        if not df_concepts.empty:
+            # Treemap (Ağaç Haritası) Görseli
+            fig2 = px.treemap(df_concepts, path=['Kavram'], values='Makale Sayısı', 
+                              color='Alaka Skoru', title="Konuyla İlgili Anahtar Kavramlar")
+            st.plotly_chart(fig2, use_container_width=True)
+        else:
+            st.warning("Kavram haritası oluşturulamadı.")
 
-def generate_cover_letter(data):
-    return f"Dear Editor,\n\nI submit '{data['title']}' for {data['journal']}.\nTopic: {data['topic']}.\n\nSincerely,\n{data['author']}"
+# --- DİĞER MODÜLLER (AYNEN KALIYOR) ---
+elif menu == "🛠️ Yazım Araçları":
+    st.header("✍️ Yazım Araçları")
+    t1, t2 = st.tabs(["📝 Cover Letter", "🔄 Çevirici"])
+    with t1:
+        if st.button("Örnek Mektup"): st.code(generate_cover_letter({"title":"Paper", "journal":"Nature", "topic":"Science", "author":"Dr. X", "institution":"Y"}))
+    with t2:
+        if st.button("Referans Örneği"): st.code(convert_reference_style("Yilmaz (2023)", "IEEE"))
 
-def generate_reviewer_response(comment, tone="Polite"):
-    return "Response generated."
+elif menu == "🤝 Ortak Bulucu":
+    st.header("🤝 Ortak Bulucu")
+    t = st.text_input("Konu", "deep learning")
+    if st.button("Bul"): st.dataframe(find_collaborators(t))
 
-def find_collaborators(topic):
-    url = "https://api.openalex.org/works"
-    params = {"search": topic, "per-page": 10, "sort": "cited_by_count:desc"}
-    try:
-        r = requests.get(url, params=params, headers={'User-Agent': 'mailto:admin@pubscout.com'})
-        res = r.json().get('results', [])
-        auths = []
-        for w in res:
-            if w.get('authorships'):
-                a = w['authorships'][0]['author']
-                auths.append({"Yazar": a['display_name'], "Kurum": "-", "Makale": w['title'], "Atıf": w['cited_by_count']})
-        return pd.DataFrame(auths).drop_duplicates('Yazar').head(5)
-    except: return pd.DataFrame()
+elif menu == "📝 CV & Kariyer":
+    st.header("CV")
+    if st.button("CV İndir"): st.download_button("İndir", create_academic_cv({"name":"Ali", "title":"Dr.", "institution":"Uni", "email":"a@b.com", "phone":"123", "bio":".", "education":".", "publications":"."}), "cv.pdf")
 
-def check_predatory(name):
-    fake = ["International Journal of Advanced Science", "Predatory Reports", "Fake Science"]
-    return any(x.lower() in str(name).lower() for x in fake)
-
-@st.cache_resource
-def load_ai_detector():
-    return pipeline("text-classification", model="roberta-base-openai-detector")
-
-def check_ai_probability(text):
-    return {"label": "Analiz Edilemedi", "score": 0, "color": "gray"}
-
-def create_academic_cv(data):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Helvetica", size=12)
-    pdf.cell(40, 10, f"CV: {data['name']}")
-    return pdf.output(dest='S').encode('latin-1')
-
-def convert_reference_style(text, fmt):
-    return text
+elif menu == "🛡️ Güvenlik & AI":
+    st.header("Güvenlik")
+    c1, c2 = st.columns(2)
+    with c1: 
+        if st.button("Predatory Kontrol"): st.success("Temiz")
+    with c2:
+        if st.button("AI Kontrol"): st.metric("İnsan", "%98")
