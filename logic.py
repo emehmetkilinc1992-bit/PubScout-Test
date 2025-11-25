@@ -7,17 +7,64 @@ import re
 from datetime import date
 from transformers import pipeline
 
-# --- AYARLAR ---
+# --- API AYARLARI ---
 BASE_URL = "https://api.openalex.org"
 HEADERS = {'User-Agent': 'mailto:admin@pubscout.com'}
 
-# --- YARDIMCI: TEMİZLİK ---
+# --- YARDIMCI: GEREKSİZ KELİMELERİ TEMİZLE ---
 def extract_keywords(text):
-    stop = ["the","of","and","in","to","a","is","for","on","with","study","analysis","investigation","research","paper"]
+    stop = ["the","of","and","in","to","a","is","for","on","with","study","analysis","investigation","research","paper","result","conclusion"]
     text = re.sub(r'[^a-zA-Z\s]', '', str(text).lower())
     return " ".join([w for w in text.split() if w not in stop and len(w)>3][:8])
 
-# --- 1. KURUM ANALİZİ (ÜNİVERSİTE) ---
+# --- 1. REFERANS BULUCU (LITERATURE SEARCH) 📚 ---
+def find_relevant_references(text_input):
+    """
+    Girilen metne dayalı olarak en alakalı makaleleri bulur.
+    """
+    try:
+        # 1. Çeviri ve Kelime Ayıklama
+        try:
+            translated = GoogleTranslator(source='auto', target='en').translate(text_input)
+            if not translated: translated = text_input
+        except: translated = text_input
+        
+        keywords = extract_keywords(translated)
+        if len(keywords) < 3: keywords = translated
+
+        # 2. Arama (En çok atıf alanları getir)
+        params = {
+            "search": keywords,
+            "per-page": 15,
+            "sort": "cited_by_count:desc",
+            "filter": "type:article",
+            "select": "title,publication_year,cited_by_count,authorships,doi,id"
+        }
+        
+        r = requests.get(f"{BASE_URL}/works", params=params, headers=HEADERS)
+        results = r.json().get('results', [])
+        
+        ref_list = []
+        for work in results:
+            author = "Unknown"
+            if work.get('authorships'):
+                author = work['authorships'][0]['author']['display_name']
+            
+            link = work.get('doi') if work.get('doi') else work.get('id')
+            
+            ref_list.append({
+                "Başlık": work['title'],
+                "Yazar": author,
+                "Yıl": work.get('publication_year'),
+                "Atıf": work.get('cited_by_count'),
+                "Link": link,
+                "APA": f"{author.split()[-1]}, {author[0]}. ({work.get('publication_year')}). {work['title']}."
+            })
+            
+        return pd.DataFrame(ref_list)
+    except: return pd.DataFrame()
+
+# --- 2. KURUMSAL ANALİZ (İSTATİSTİK DASHBOARD) 🏛️ ---
 def analyze_university_stats(uni_name):
     try:
         # 1. Kurum ID Bul
@@ -29,7 +76,7 @@ def analyze_university_stats(uni_name):
         inst_id = best_match['id']
         uni_display_name = best_match['display_name']
         
-        # 2. Veri Çek (Son 10 Yıl)
+        # 2. İstatistik Verisi Çek
         params = {
             "filter": f"institutions.id:{inst_id},type:article,from_publication_date:{date.today().year - 10}-01-01",
             "select": "primary_location,publication_year,cited_by_count",
@@ -37,7 +84,7 @@ def analyze_university_stats(uni_name):
         }
 
         stats_data = []
-        for page in range(1, 6): # 1000 Makale Limiti
+        for page in range(1, 6): # 1000 Makale Örneklemi
             params['page'] = page
             r = requests.get(f"{BASE_URL}/works", params=params, headers=HEADERS)
             data = r.json().get('results', [])
@@ -46,13 +93,11 @@ def analyze_university_stats(uni_name):
             
         if not stats_data: return uni_display_name, pd.DataFrame()
 
-        # 3. İşle
         processed_list = []
         for item in stats_data:
             if not item.get('primary_location') or not item['primary_location'].get('source'): continue
             src = item['primary_location']['source']
             imp = src.get('cited_by_count', 0)
-            
             if imp > 20000: q = "Q1"
             elif imp > 5000: q = "Q2"
             elif imp > 1000: q = "Q3"
@@ -67,7 +112,7 @@ def analyze_university_stats(uni_name):
         return uni_display_name, pd.DataFrame(processed_list)
     except: return None, pd.DataFrame()
 
-# --- 2. DERGİ ARAMA ---
+# --- 3. DERGİ BULMA MOTORU (ÖZET & DOI) ---
 def get_journals_from_openalex(text_input, mode="abstract"):
     columns = ["Dergi Adı", "Yayınevi", "Q Değeri", "Link", "Kaynak", "Atıf Gücü"]
     journal_list = []
@@ -115,7 +160,7 @@ def get_journals_from_openalex(text_input, mode="abstract"):
     df = pd.DataFrame(journal_list)
     return df.drop_duplicates('Dergi Adı') if not df.empty else pd.DataFrame(columns=columns)
 
-# --- 3. STRATEJİ ---
+# --- 4. STRATEJİ ARAÇLARI (TREND, FON, KAVRAM) ---
 def analyze_trends(topic):
     try:
         try: t_en = GoogleTranslator(source='auto', target='en').translate(topic)
@@ -147,7 +192,7 @@ def analyze_concepts(topic):
         return pd.DataFrame(data).head(15)
     except: return pd.DataFrame()
 
-# --- 4. DİĞER ARAÇLAR ---
+# --- 5. DİĞER ARAÇLAR ---
 def analyze_sdg_goals(text):
     if not text: return pd.DataFrame()
     keys = {"SDG 3 (Sağlık)":["health"], "SDG 4 (Eğitim)":["education"], "SDG 9 (AI/Tech)":["ai","data"], "SDG 13 (İklim)":["climate"]}
