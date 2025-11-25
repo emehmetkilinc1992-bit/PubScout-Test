@@ -7,17 +7,17 @@ import re
 from datetime import date
 from transformers import pipeline
 
-# --- API AYARLARI ---
+# --- AYARLAR ---
 BASE_URL = "https://api.openalex.org"
 HEADERS = {'User-Agent': 'mailto:admin@pubscout.com'}
 
-# --- YARDIMCI: GEREKSİZ KELİMELERİ TEMİZLE ---
+# --- YARDIMCI: TEMİZLİK ---
 def extract_keywords(text):
     stop = ["the","of","and","in","to","a","is","for","on","with","study","analysis","investigation","research","paper"]
     text = re.sub(r'[^a-zA-Z\s]', '', str(text).lower())
     return " ".join([w for w in text.split() if w not in stop and len(w)>3][:8])
 
-# --- 1. KURUMSAL ANALİZ (DASHBOARD İÇİN İSTATİSTİK) 🏛️ ---
+# --- 1. KURUM ANALİZİ (ÜNİVERSİTE) ---
 def analyze_university_stats(uni_name):
     try:
         # 1. Kurum ID Bul
@@ -29,7 +29,7 @@ def analyze_university_stats(uni_name):
         inst_id = best_match['id']
         uni_display_name = best_match['display_name']
         
-        # 2. İstatistik Verisi Çek (Son 10 Yıl)
+        # 2. Veri Çek (Son 10 Yıl)
         params = {
             "filter": f"institutions.id:{inst_id},type:article,from_publication_date:{date.today().year - 10}-01-01",
             "select": "primary_location,publication_year,cited_by_count",
@@ -37,8 +37,7 @@ def analyze_university_stats(uni_name):
         }
 
         stats_data = []
-        # 5 Sayfa x 200 = 1000 Makale Örneklemi (İstatistik için yeterli ve hızlı)
-        for page in range(1, 6):
+        for page in range(1, 6): # 1000 Makale Limiti
             params['page'] = page
             r = requests.get(f"{BASE_URL}/works", params=params, headers=HEADERS)
             data = r.json().get('results', [])
@@ -47,14 +46,13 @@ def analyze_university_stats(uni_name):
             
         if not stats_data: return uni_display_name, pd.DataFrame()
 
-        # 3. Veriyi İşle
+        # 3. İşle
         processed_list = []
         for item in stats_data:
             if not item.get('primary_location') or not item['primary_location'].get('source'): continue
             src = item['primary_location']['source']
-            
-            # Q Değeri Tahmini
             imp = src.get('cited_by_count', 0)
+            
             if imp > 20000: q = "Q1"
             elif imp > 5000: q = "Q2"
             elif imp > 1000: q = "Q3"
@@ -69,7 +67,7 @@ def analyze_university_stats(uni_name):
         return uni_display_name, pd.DataFrame(processed_list)
     except: return None, pd.DataFrame()
 
-# --- 2. DERGİ BULMA MOTORU ---
+# --- 2. DERGİ ARAMA ---
 def get_journals_from_openalex(text_input, mode="abstract"):
     columns = ["Dergi Adı", "Yayınevi", "Q Değeri", "Link", "Kaynak", "Atıf Gücü"]
     journal_list = []
@@ -81,12 +79,11 @@ def get_journals_from_openalex(text_input, mode="abstract"):
         except: translated = text_input
         
         keywords = extract_keywords(translated)
-        if len(keywords)<3: keywords = translated # Fallback
+        if len(keywords)<3: keywords = translated
 
         try:
             r = requests.get(f"{BASE_URL}/works", params={"search":keywords,"per-page":50,"filter":"type:article","select":"primary_location,title,cited_by_count"}, headers=HEADERS)
             results = r.json().get('results', [])
-            # Sonuç yoksa tek kelimeyle dene
             if not results:
                 r = requests.get(f"{BASE_URL}/works", params={"search":keywords.split()[0],"per-page":50}, headers=HEADERS)
                 results = r.json().get('results', [])
@@ -118,7 +115,7 @@ def get_journals_from_openalex(text_input, mode="abstract"):
     df = pd.DataFrame(journal_list)
     return df.drop_duplicates('Dergi Adı') if not df.empty else pd.DataFrame(columns=columns)
 
-# --- 3. STRATEJİ ARAÇLARI (TREND, FON, KAVRAM) ---
+# --- 3. STRATEJİ ---
 def analyze_trends(topic):
     try:
         try: t_en = GoogleTranslator(source='auto', target='en').translate(topic)
@@ -150,7 +147,7 @@ def analyze_concepts(topic):
         return pd.DataFrame(data).head(15)
     except: return pd.DataFrame()
 
-# --- 4. YARDIMCI ARAÇLAR ---
+# --- 4. DİĞER ARAÇLAR ---
 def analyze_sdg_goals(text):
     if not text: return pd.DataFrame()
     keys = {"SDG 3 (Sağlık)":["health"], "SDG 4 (Eğitim)":["education"], "SDG 9 (AI/Tech)":["ai","data"], "SDG 13 (İklim)":["climate"]}
@@ -175,6 +172,6 @@ def check_ai_probability(text):
         res = load_ai_detector()(text[:512])[0]
         return {"label": "Yapay Zeka (AI)" if res['label']=='Fake' else "İnsan", "score": res['score'], "color": "#FF4B4B" if res['label']=='Fake' else "#00CC96"}
     except: return None
-def create_academic_cv(d): 
-    pdf=FPDF(); pdf.add_page(); pdf.set_font("Arial",size=12); pdf.cell(40,10,f"CV: {d.get('name')}"); return pdf.output(dest='S').encode('latin-1')
-def convert_reference_style(t,f): return t
+def create_academic_cv(data): 
+    pdf=FPDF(); pdf.add_page(); pdf.set_font("Arial",size=12); pdf.cell(40,10,f"CV: {data.get('name')}"); return pdf.output(dest='S').encode('latin-1')
+def convert_reference_style(text, fmt): return text
