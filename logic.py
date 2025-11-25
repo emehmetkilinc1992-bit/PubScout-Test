@@ -1,156 +1,74 @@
-import requests
-import pandas as pd
-import streamlit as st
-from deep_translator import GoogleTranslator
-from fpdf import FPDF
-import re
-from datetime import date
+# --- MEVCUT KODLARIN ALTINA EKLE ---
 
-# --- 1. GARANTİLİ TREND ANALİZİ 📈 ---
-def analyze_trends(topic):
-    base_url = "https://api.openalex.org/works"
+# --- YENİ: 8. KURUMSAL ANALİZ (ÜNİVERSİTE YAYINLARI) 🏛️ ---
+def analyze_university_pubs(uni_name):
+    """
+    Üniversite isminden kurum ID'sini bulur ve son yayınlarını çeker.
+    Ardından dergi kalitesine (Tahmini Q) göre sınıflandırır.
+    """
+    base_url = "https://api.openalex.org"
     headers = {'User-Agent': 'mailto:admin@pubscout.com'}
     
+    # 1. ADIM: Üniversite ID'sini Bul
     try:
-        # Konuyu İngilizceye çevir
-        topic_en = GoogleTranslator(source='auto', target='en').translate(topic)
-    except: topic_en = topic
-
-    # Yıllara göre grupla
-    params = {
-        "search": topic_en,
-        "group_by": "publication_year",
-    }
-    
-    try:
-        resp = requests.get(base_url, params=params, headers=headers)
-        data = resp.json().get('group_by', [])
+        # Kurum araması yap
+        inst_params = {"search": uni_name}
+        r_inst = requests.get(f"{base_url}/institutions", params=inst_params, headers=headers)
+        inst_data = r_inst.json().get('results', [])
         
-        # Veriyi DataFrame'e dök
-        df = pd.DataFrame(data)
+        if not inst_data:
+            return None, "Kurum bulunamadı."
+            
+        # En iyi eşleşen kurumu al
+        best_match = inst_data[0]
+        inst_id = best_match['id'] # Örn: https://openalex.org/I20463608 (Gazi Üniv)
+        inst_display_name = best_match['display_name']
         
-        if df.empty: return pd.DataFrame()
-
-        # Sütun isimlerini düzelt
-        df.columns = ['Yıl', 'Makale Sayısı']
+        # 2. ADIM: Bu Kurumun Son Yayınlarını Çek
+        work_params = {
+            "filter": f"institutions.id:{inst_id},type:article", # Sadece o kurum ve makaleler
+            "sort": "publication_date:desc", # En yeniden eskiye
+            "per-page": 100 # Son 100 makale (Demo için yeterli)
+        }
         
-        # Yılları sayıya çevir ve sırala
-        df['Yıl'] = df['Yıl'].astype(int)
+        r_works = requests.get(f"{base_url}/works", params=work_params, headers=headers)
+        works_data = r_works.json().get('results', [])
         
-        # Gelecek yılları veya çok eski yılları temizle (Son 15 yıl)
-        current_year = date.today().year
-        df = df[(df['Yıl'] >= current_year - 15) & (df['Yıl'] <= current_year)]
+        pub_list = []
         
-        return df.sort_values('Yıl')
-    except:
-        return pd.DataFrame()
-
-# --- 2. GARANTİLİ KAVRAM HARİTASI (TREEMAP FIX) 🧠 ---
-def analyze_concepts(topic):
-    base_url = "https://api.openalex.org/concepts"
-    params = {"search": topic}
-    
-    try:
-        resp = requests.get(base_url, params=params)
-        results = resp.json().get('results', [])
-        
-        concepts = []
-        for c in results:
-            concepts.append({
-                "Kavram": c['display_name'],
-                "Alaka Skoru": c['relevance_score'],
-                "Makale Sayısı": c['works_count'],
-                "Ana Kategori": "İlişkili Alanlar" # <-- TREEMAP İÇİN GEREKLİ "KÖK" SÜTUN
+        # 3. ADIM: Yayınları Analiz Et ve Q Değeri Ata
+        for work in works_data:
+            if not work.get('primary_location') or not work['primary_location'].get('source'):
+                continue
+                
+            source = work['primary_location']['source']
+            journal_name = source.get('display_name', 'Bilinmiyor')
+            
+            # Derginin Atıf Gücü (Cited by count, o derginin popülerliği)
+            # OpenAlex'te 'cited_by_count' makalenin atıfıdır.
+            # Derginin kalitesini anlamak için makalenin atıfını ve derginin genel seviyesini kullanırız.
+            
+            # Basit Q Değeri Simülasyonu (Gerçek veriler ücretlidir)
+            # Derginin genel atıf sayısına (works_count vb.) bakarak tahmin ediyoruz.
+            
+            impact_proxy = source.get('cited_by_count', 0) # Derginin toplam atıfı
+            paper_citation = work.get('cited_by_count', 0) # Makalenin kendi atıfı
+            
+            # Tahmini Sınıflandırma
+            if impact_proxy > 50000: q_val = "Q1 (Çok Yüksek)"
+            elif impact_proxy > 10000: q_val = "Q2 (Yüksek)"
+            elif impact_proxy > 2000: q_val = "Q3 (Orta)"
+            else: q_val = "Q4 (Düşük/Yerel)"
+            
+            pub_list.append({
+                "Makale Başlığı": work['title'],
+                "Dergi": journal_name,
+                "Yayın Yılı": work.get('publication_year'),
+                "Makale Atıfı": paper_citation,
+                "Kalite Sınıfı": q_val
             })
             
-        df = pd.DataFrame(concepts).head(15) # İlk 15 kavram
-        return df
-    except:
-        return pd.DataFrame()
+        return pd.DataFrame(pub_list), inst_display_name
 
-# --- 3. FON BULUCU 💰 ---
-def find_funders(topic):
-    base_url = "https://api.openalex.org/works"
-    headers = {'User-Agent': 'mailto:admin@pubscout.com'}
-    
-    try:
-        # Konu çevirisi
-        try:
-            t_en = GoogleTranslator(source='auto', target='en').translate(topic)
-        except: t_en = topic
-
-        params = {"search": t_en, "select": "grants", "per-page": 50}
-        resp = requests.get(base_url, params=params, headers=headers)
-        results = resp.json().get('results', [])
-        
-        funder_list = []
-        for work in results:
-            for grant in work.get('grants', []):
-                if grant and grant.get('funder'):
-                    funder_list.append(grant['funder'])
-        
-        if not funder_list: return pd.DataFrame()
-        
-        df = pd.DataFrame(funder_list).value_counts().reset_index()
-        df.columns = ['Kurum Adı', 'Destek Sayısı']
-        return df.head(10)
-    except: return pd.DataFrame()
-
-# --- MEVCUT ARAÇLAR (Aynen Kalıyor - Kopyalamayı Unutma) ---
-# Aşağıdakiler önceki çalışan kodlardır:
-
-def extract_keywords(text):
-    stop = ["the","of","and","in","to","a","is","for","on","with","study","analysis"]
-    txt = re.sub(r'[^a-zA-Z\s]', '', str(text).lower())
-    return " ".join([w for w in txt.split() if w not in stop and len(w)>3][:8])
-
-def get_journals_from_openalex(text_input, mode="abstract"):
-    # (Önceki cevaptaki çalışan fonksiyonu buraya yapıştır)
-    # Kısaltmak için tekrar yazmıyorum, önceki logic.py'deki aynısı kalacak.
-    base_url = "https://api.openalex.org/works"
-    headers = {'User-Agent': 'mailto:admin@pubscout.com'}
-    columns = ["Dergi Adı", "Yayınevi", "Q Değeri", "Link", "Kaynak", "Atıf Gücü"]
-    journal_list = []
-
-    if mode == "abstract" and text_input:
-        try: translated = GoogleTranslator(source='auto', target='en').translate(text_input)
-        except: translated = text_input
-        keywords = extract_keywords(translated)
-        if len(keywords)<3: keywords=translated
-        try:
-            r = requests.get(base_url, params={"search":keywords,"per-page":50,"filter":"type:article","select":"primary_location,title,cited_by_count"}, headers=headers)
-            res = r.json().get('results', [])
-        except: res=[]
-    elif mode == "doi" and text_input:
-        cln = text_input.replace("https://doi.org/","").replace("doi:","").strip()
-        dois = list(set(re.findall(r'(10\.\d{4,9}/[-._;()/:a-zA-Z0-9]+)', cln)))
-        res=[]
-        for d in dois[:10]:
-            try:
-                r = requests.get(f"https://api.openalex.org/works/https://doi.org/{d.rstrip('.,)')}", headers=headers)
-                if r.status_code==200: res.append(r.json())
-            except: pass
-    else: return pd.DataFrame(columns=columns)
-
-    for w in res:
-        try:
-            loc = w.get('primary_location',{})
-            if loc and loc.get('source'):
-                src = loc.get('source')
-                if src.get('display_name'):
-                    imp = w.get('cited_by_count',0)
-                    q="Q1" if imp>50 else "Q2" if imp>20 else "Q3" if imp>5 else "Q4"
-                    journal_list.append({"Dergi Adı":src['display_name'],"Yayınevi":src['host_organization_name'],"Q Değeri":q,"Link":src['homepage_url'],"Atıf Gücü":imp})
-        except: continue
-    df = pd.DataFrame(journal_list)
-    return df.drop_duplicates('Dergi Adı') if not df.empty else pd.DataFrame(columns=columns)
-
-# --- Diğer Yardımcılar ---
-def analyze_sdg_goals(t): return pd.DataFrame() # Placeholder
-def generate_cover_letter(d): return "Letter"
-def generate_reviewer_response(c,t): return "Response"
-def find_collaborators(t): return pd.DataFrame()
-def check_predatory(n): return False
-def check_ai_probability(t): return None
-def create_academic_cv(d): return b""
-def convert_reference_style(t,f): return t
+    except Exception as e:
+        return None, str(e)
